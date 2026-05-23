@@ -7,6 +7,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const signupBox = document.getElementById('signupBox');
   const message = document.getElementById('message');
 
+  async function readResponse(res) {
+    const text = await res.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      return { error: text };
+    }
+  }
+
   if (toggleSignup && toggleLogin) {
     toggleSignup.addEventListener('click', (e) => {
       e.preventDefault();
@@ -28,9 +38,11 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       const email = document.getElementById('loginEmail').value;
       const password = document.getElementById('loginPassword').value;
+      const submitButton = loginForm.querySelector('button[type="submit"]');
 
-      message.textContent = '';
+      message.textContent = 'Signing in...';
       message.className = 'message';
+      if (submitButton) submitButton.disabled = true;
 
       try {
         const res = await fetch('/api/login', {
@@ -38,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
         });
-        const json = await res.json();
+        const json = await readResponse(res);
         if (!res.ok) {
           message.textContent = json.error || 'Login failed';
           message.className = 'message error';
@@ -54,6 +66,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('login error', err);
         message.textContent = 'Login failed (network)';
         message.className = 'message error';
+      } finally {
+        if (submitButton) submitButton.disabled = false;
       }
     });
   }
@@ -64,13 +78,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const email = document.getElementById('signupEmail').value;
       const password = document.getElementById('signupPassword').value;
       const name = document.getElementById('signupName').value;
+      const submitButton = signupForm.querySelector('button[type="submit"]');
 
-      message.textContent = '';
+      message.textContent = 'Creating account...';
       message.className = 'message';
+      if (submitButton) submitButton.disabled = true;
 
       if (password.length < 6) {
         message.textContent = 'Password must be at least 6 characters.';
         message.className = 'message error';
+        if (submitButton) submitButton.disabled = false;
         return;
       }
 
@@ -80,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password, name })
         });
-        const json = await res.json();
+        const json = await readResponse(res);
         if (!res.ok) {
           console.error('signup error', json);
           message.textContent = json.error || 'Signup failed';
@@ -117,6 +134,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('signup network error', err);
         message.textContent = 'Signup failed (network)';
         message.className = 'message error';
+      } finally {
+        if (submitButton) submitButton.disabled = false;
       }
     });
   }
