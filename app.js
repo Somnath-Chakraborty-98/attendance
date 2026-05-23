@@ -33,6 +33,19 @@ function signJwt(payload) {
     return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
+function requireAuth(req, res, next) {
+    const auth = req.headers.authorization || '';
+    const m = auth.match(/^Bearer\s+(.*)$/i);
+    if (!m) return res.status(401).json({ error: 'Missing token' });
+
+    try {
+        req.user = jwt.verify(m[1], process.env.JWT_SECRET);
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+    }
+}
+
 function withTimeout(promise, ms, message) {
     let timer;
     const timeout = new Promise((resolve, reject) => {
@@ -202,6 +215,169 @@ app.get('/api/me', async (req, res) => {
     } catch (err) {
         console.error('me error', err);
         return res.status(401).json({ error: 'Invalid token' });
+    }
+});
+
+app.get('/api/workers', requireAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const q = await client.query('SELECT id, worker_id, name FROM public.workers ORDER BY worker_id ASC');
+        res.json({ workers: q.rows });
+    } catch (err) {
+        console.error('workers list error', err);
+        res.status(500).json({ error: 'Failed to load workers' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/workers', requireAuth, async (req, res) => {
+    const { worker_id, name } = req.body || {};
+    if (!worker_id || !name) return res.status(400).json({ error: 'Missing worker ID or name' });
+
+    const client = await pool.connect();
+    try {
+        const q = await client.query(
+            'INSERT INTO public.workers(worker_id, name) VALUES($1,$2) RETURNING id, worker_id, name',
+            [worker_id, name]
+        );
+        res.status(201).json({ worker: q.rows[0] });
+    } catch (err) {
+        console.error('worker create error', err);
+        if (err.code === '23505') return res.status(409).json({ error: 'Worker ID already exists' });
+        res.status(500).json({ error: 'Failed to add worker' });
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/api/workers/:id', requireAuth, async (req, res) => {
+    const { worker_id, name } = req.body || {};
+    if (!worker_id || !name) return res.status(400).json({ error: 'Missing worker ID or name' });
+
+    const client = await pool.connect();
+    try {
+        const q = await client.query(
+            'UPDATE public.workers SET worker_id=$1, name=$2 WHERE id=$3 RETURNING id, worker_id, name',
+            [worker_id, name, req.params.id]
+        );
+        if (!q.rowCount) return res.status(404).json({ error: 'Worker not found' });
+        res.json({ worker: q.rows[0] });
+    } catch (err) {
+        console.error('worker update error', err);
+        if (err.code === '23505') return res.status(409).json({ error: 'Worker ID already exists' });
+        res.status(500).json({ error: 'Failed to update worker' });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/workers/:id', requireAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const worker = await client.query('SELECT worker_id FROM public.workers WHERE id=$1', [req.params.id]);
+        if (!worker.rowCount) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Worker not found' });
+        }
+
+        await client.query('DELETE FROM public.attendance WHERE worker_id=$1', [worker.rows[0].worker_id]);
+        await client.query('DELETE FROM public.workers WHERE id=$1', [req.params.id]);
+        await client.query('COMMIT');
+        res.json({ ok: true });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('worker delete error', err);
+        res.status(500).json({ error: 'Failed to delete worker' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/attendance', requireAuth, async (req, res) => {
+    const { date, worker_id } = req.query;
+    const params = [];
+    const where = [];
+
+    if (date) {
+        params.push(date);
+        where.push(`a.date = $${params.length}`);
+    }
+    if (worker_id) {
+        params.push(worker_id);
+        where.push(`a.worker_id = $${params.length}`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const client = await pool.connect();
+    try {
+        const q = await client.query(
+            `SELECT a.id, a.date, a.worker_id, a.in_time, a.out_time, a.visit_time_from, a.visit_time_to, w.name
+             FROM public.attendance a
+             LEFT JOIN public.workers w ON w.worker_id = a.worker_id
+             ${whereSql}
+             ORDER BY a.date DESC, a.worker_id ASC
+             LIMIT 200`,
+            params
+        );
+        res.json({ attendance: q.rows });
+    } catch (err) {
+        console.error('attendance list error', err);
+        res.status(500).json({ error: 'Failed to load attendance' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/attendance', requireAuth, async (req, res) => {
+    const { date, worker_id, in_time, out_time, visit_time_from, visit_time_to } = req.body || {};
+    if (!date || !worker_id) return res.status(400).json({ error: 'Missing date or worker' });
+
+    const client = await pool.connect();
+    try {
+        const existing = await client.query(
+            'SELECT id FROM public.attendance WHERE date=$1 AND worker_id=$2',
+            [date, worker_id]
+        );
+
+        let q;
+        if (existing.rowCount) {
+            q = await client.query(
+                `UPDATE public.attendance
+                 SET in_time=$1, out_time=$2, visit_time_from=$3, visit_time_to=$4
+                 WHERE id=$5
+                 RETURNING id, date, worker_id, in_time, out_time, visit_time_from, visit_time_to`,
+                [in_time || null, out_time || null, visit_time_from || null, visit_time_to || null, existing.rows[0].id]
+            );
+        } else {
+            q = await client.query(
+                `INSERT INTO public.attendance(date, worker_id, in_time, out_time, visit_time_from, visit_time_to)
+                 VALUES($1,$2,$3,$4,$5,$6)
+                 RETURNING id, date, worker_id, in_time, out_time, visit_time_from, visit_time_to`,
+                [date, worker_id, in_time || null, out_time || null, visit_time_from || null, visit_time_to || null]
+            );
+        }
+
+        res.json({ attendance: q.rows[0] });
+    } catch (err) {
+        console.error('attendance save error', err);
+        res.status(500).json({ error: 'Failed to save attendance' });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/attendance/:id', requireAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('DELETE FROM public.attendance WHERE id=$1', [req.params.id]);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('attendance delete error', err);
+        res.status(500).json({ error: 'Failed to delete attendance' });
+    } finally {
+        client.release();
     }
 });
 
