@@ -101,6 +101,25 @@ app.get('/api/smtp-test', async (req, res) => {
     }
 });
 
+app.get('/api/schema-test', requireAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const q = await client.query(
+            `SELECT table_name, column_name, data_type
+             FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name IN ('workers', 'attendance')
+             ORDER BY table_name, ordinal_position`
+        );
+        res.json({ ok: true, columns: q.rows });
+    } catch (err) {
+        console.error('schema-test error', err);
+        res.status(500).json({ error: err.message || 'Schema test failed' });
+    } finally {
+        client.release();
+    }
+});
+
 app.post('/api/signup', async (req, res) => {
     const { email, password, name } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
@@ -221,11 +240,11 @@ app.get('/api/me', async (req, res) => {
 app.get('/api/workers', requireAuth, async (req, res) => {
     const client = await pool.connect();
     try {
-        const q = await client.query('SELECT id, worker_id, name FROM public.workers ORDER BY worker_id ASC');
+        const q = await client.query('SELECT id, workerid AS worker_id, name FROM public.workers ORDER BY workerid ASC');
         res.json({ workers: q.rows });
     } catch (err) {
         console.error('workers list error', err);
-        res.status(500).json({ error: 'Failed to load workers' });
+        res.status(500).json({ error: err.message || 'Failed to load workers' });
     } finally {
         client.release();
     }
@@ -238,14 +257,14 @@ app.post('/api/workers', requireAuth, async (req, res) => {
     const client = await pool.connect();
     try {
         const q = await client.query(
-            'INSERT INTO public.workers(worker_id, name) VALUES($1,$2) RETURNING id, worker_id, name',
+            'INSERT INTO public.workers(workerid, name) VALUES($1,$2) RETURNING id, workerid AS worker_id, name',
             [worker_id, name]
         );
         res.status(201).json({ worker: q.rows[0] });
     } catch (err) {
         console.error('worker create error', err);
         if (err.code === '23505') return res.status(409).json({ error: 'Worker ID already exists' });
-        res.status(500).json({ error: 'Failed to add worker' });
+        res.status(500).json({ error: err.message || 'Failed to add worker' });
     } finally {
         client.release();
     }
@@ -258,7 +277,7 @@ app.put('/api/workers/:id', requireAuth, async (req, res) => {
     const client = await pool.connect();
     try {
         const q = await client.query(
-            'UPDATE public.workers SET worker_id=$1, name=$2 WHERE id=$3 RETURNING id, worker_id, name',
+            'UPDATE public.workers SET workerid=$1, name=$2 WHERE id=$3 RETURNING id, workerid AS worker_id, name',
             [worker_id, name, req.params.id]
         );
         if (!q.rowCount) return res.status(404).json({ error: 'Worker not found' });
@@ -266,7 +285,7 @@ app.put('/api/workers/:id', requireAuth, async (req, res) => {
     } catch (err) {
         console.error('worker update error', err);
         if (err.code === '23505') return res.status(409).json({ error: 'Worker ID already exists' });
-        res.status(500).json({ error: 'Failed to update worker' });
+        res.status(500).json({ error: err.message || 'Failed to update worker' });
     } finally {
         client.release();
     }
@@ -276,7 +295,7 @@ app.delete('/api/workers/:id', requireAuth, async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const worker = await client.query('SELECT worker_id FROM public.workers WHERE id=$1', [req.params.id]);
+        const worker = await client.query('SELECT workerid AS worker_id FROM public.workers WHERE id=$1', [req.params.id]);
         if (!worker.rowCount) {
             await client.query('ROLLBACK');
             return res.status(404).json({ error: 'Worker not found' });
@@ -289,7 +308,7 @@ app.delete('/api/workers/:id', requireAuth, async (req, res) => {
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('worker delete error', err);
-        res.status(500).json({ error: 'Failed to delete worker' });
+        res.status(500).json({ error: err.message || 'Failed to delete worker' });
     } finally {
         client.release();
     }
@@ -315,7 +334,7 @@ app.get('/api/attendance', requireAuth, async (req, res) => {
         const q = await client.query(
             `SELECT a.id, a.date, a.worker_id, a.in_time, a.out_time, a.visit_time_from, a.visit_time_to, w.name
              FROM public.attendance a
-             LEFT JOIN public.workers w ON w.worker_id = a.worker_id
+             LEFT JOIN public.workers w ON w.workerid = a.worker_id
              ${whereSql}
              ORDER BY a.date DESC, a.worker_id ASC
              LIMIT 200`,
