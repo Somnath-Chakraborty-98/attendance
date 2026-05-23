@@ -249,6 +249,7 @@ async function deleteAttendance(id) {
 function initRecordsFilter() {
   document.getElementById('btnFilter').addEventListener('click', loadRecords);
   document.getElementById('btnExport').addEventListener('click', exportRecords);
+  document.getElementById('btnExportExcel').addEventListener('click', exportRecordsExcel);
   document.getElementById('btnClearFilter').addEventListener('click', () => {
     document.getElementById('filterDate').value = '';
     document.getElementById('filterWorker').value = '';
@@ -342,6 +343,61 @@ async function exportRecords() {
   } finally {
     exportButton.disabled = false;
     exportButton.textContent = 'Export CSV';
+  }
+}
+
+async function exportRecordsExcel() {
+  const exportButton = document.getElementById('btnExportExcel');
+  const params = getRecordFilterParams();
+
+  exportButton.disabled = true;
+  exportButton.textContent = 'Exporting...';
+
+  try {
+    const { attendance } = await apiRequest(`/api/attendance?${params.toString()}`);
+    if (!attendance || attendance.length === 0) {
+      alert('No records to export.');
+      return;
+    }
+
+    const rows = [
+      ['Date', 'Worker ID', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To'],
+      ...attendance.map(a => [
+        a.date || '',
+        a.worker_id || '',
+        a.name || '',
+        a.in_time || '',
+        a.out_time || '',
+        a.visit_time_from || '',
+        a.visit_time_to || ''
+      ])
+    ];
+
+    const tableRows = rows.map(row =>
+      '<tr>' + row.map(value => `<td>${escapeHtml(value)}</td>`).join('') + '</tr>'
+    ).join('');
+    const workbook = `
+      <html>
+        <head><meta charset="UTF-8"></head>
+        <body><table>${tableRows}</table></body>
+      </html>
+    `;
+    const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    link.href = url;
+    link.download = `attendance-records-${stamp}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    exportButton.disabled = false;
+    exportButton.textContent = 'Export Excel';
   }
 }
 
