@@ -33,6 +33,15 @@ function signJwt(payload) {
     return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
+function withTimeout(promise, ms, message) {
+    let timer;
+    const timeout = new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 app.get('/api/health', (req, res) => {
     res.json({
         ok: true,
@@ -47,6 +56,36 @@ app.get('/api/health', (req, res) => {
             ZOHO_FROM_EMAIL: Boolean(process.env.ZOHO_FROM_EMAIL)
         }
     });
+});
+
+app.get('/api/db-test', async (req, res) => {
+    if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL is missing' });
+
+    let client;
+    try {
+        client = await withTimeout(pool.connect(), 8000, 'Database connection timed out');
+        const result = await withTimeout(client.query('SELECT NOW() AS now'), 8000, 'Database query timed out');
+        res.json({ ok: true, now: result.rows[0].now });
+    } catch (err) {
+        console.error('db-test error', err);
+        res.status(500).json({ error: err.message || 'Database test failed' });
+    } finally {
+        if (client) client.release();
+    }
+});
+
+app.get('/api/smtp-test', async (req, res) => {
+    if (!process.env.ZOHO_SMTP_HOST || !process.env.ZOHO_SMTP_USER || !process.env.ZOHO_SMTP_PASS || !process.env.ZOHO_FROM_EMAIL) {
+        return res.status(500).json({ error: 'Email settings are missing' });
+    }
+
+    try {
+        await withTimeout(transporter.verify(), 8000, 'SMTP connection timed out');
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('smtp-test error', err);
+        res.status(500).json({ error: err.message || 'SMTP test failed' });
+    }
 });
 
 app.post('/api/signup', async (req, res) => {
@@ -83,12 +122,12 @@ app.post('/api/signup', async (req, res) => {
         const siteUrl = process.env.SITE_URL || 'http://localhost:5500';
         const verifyLink = `${siteUrl.replace(/\/$/, '')}/api/verify?token=${token}`;
 
-        await transporter.sendMail({
+        await withTimeout(transporter.sendMail({
             from: process.env.ZOHO_FROM_EMAIL,
             to: email,
             subject: 'Confirm your account',
             html: `<p>Hi ${name || ''},</p><p>Please confirm your email by clicking the link below:</p><p><a href="${verifyLink}">Confirm email</a></p>`
-        });
+        }), 8000, 'Confirmation email timed out');
 
         res.json({ message: 'confirmation_sent' });
     } catch (err) {
