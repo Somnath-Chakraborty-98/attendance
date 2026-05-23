@@ -248,6 +248,7 @@ async function deleteAttendance(id) {
 
 function initRecordsFilter() {
   document.getElementById('btnFilter').addEventListener('click', loadRecords);
+  document.getElementById('btnExport').addEventListener('click', exportRecords);
   document.getElementById('btnClearFilter').addEventListener('click', () => {
     document.getElementById('filterDate').value = '';
     document.getElementById('filterWorker').value = '';
@@ -256,14 +257,20 @@ function initRecordsFilter() {
   });
 }
 
-async function loadRecords() {
-  const tbody = document.getElementById('recordsTableBody');
+function getRecordFilterParams() {
   const date = document.getElementById('filterDate').value;
   const workerId = document.getElementById('filterWorker').value;
   const params = new URLSearchParams();
 
   if (date) params.set('date', date);
   if (workerId) params.set('worker_id', workerId);
+
+  return params;
+}
+
+async function loadRecords() {
+  const tbody = document.getElementById('recordsTableBody');
+  const params = getRecordFilterParams();
 
   tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading...</td></tr>';
 
@@ -289,6 +296,58 @@ async function loadRecords() {
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
   }
+}
+
+async function exportRecords() {
+  const exportButton = document.getElementById('btnExport');
+  const params = getRecordFilterParams();
+
+  exportButton.disabled = true;
+  exportButton.textContent = 'Exporting...';
+
+  try {
+    const { attendance } = await apiRequest(`/api/attendance?${params.toString()}`);
+    if (!attendance || attendance.length === 0) {
+      alert('No records to export.');
+      return;
+    }
+
+    const rows = [
+      ['Date', 'Worker ID', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To'],
+      ...attendance.map(a => [
+        a.date || '',
+        a.worker_id || '',
+        a.name || '',
+        a.in_time || '',
+        a.out_time || '',
+        a.visit_time_from || '',
+        a.visit_time_to || ''
+      ])
+    ];
+
+    const csv = rows.map(row => row.map(csvCell).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    link.href = url;
+    link.download = `attendance-records-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    exportButton.disabled = false;
+    exportButton.textContent = 'Export CSV';
+  }
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function escapeHtml(str) {
