@@ -301,7 +301,7 @@ app.delete('/api/workers/:id', requireAuth, async (req, res) => {
             return res.status(404).json({ error: 'Worker not found' });
         }
 
-        await client.query('DELETE FROM public.attendance WHERE worker_id=$1', [worker.rows[0].worker_id]);
+        await client.query('DELETE FROM public.attendance WHERE workerid=$1', [worker.rows[0].worker_id]);
         await client.query('DELETE FROM public.workers WHERE id=$1', [req.params.id]);
         await client.query('COMMIT');
         res.json({ ok: true });
@@ -325,18 +325,26 @@ app.get('/api/attendance', requireAuth, async (req, res) => {
     }
     if (worker_id) {
         params.push(worker_id);
-        where.push(`a.worker_id = $${params.length}`);
+        where.push(`a.workerid = $${params.length}`);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const client = await pool.connect();
     try {
         const q = await client.query(
-            `SELECT a.id, a.date, a.worker_id, a.in_time, a.out_time, a.visit_time_from, a.visit_time_to, w.name
+            `SELECT
+                a.id,
+                a.date,
+                a.workerid AS worker_id,
+                a.intime AS in_time,
+                a.outtime AS out_time,
+                a.visittimefrom AS visit_time_from,
+                a.visittimeto AS visit_time_to,
+                w.name
              FROM public.attendance a
-             LEFT JOIN public.workers w ON w.workerid = a.worker_id
+             LEFT JOIN public.workers w ON w.workerid = a.workerid
              ${whereSql}
-             ORDER BY a.date DESC, a.worker_id ASC
+             ORDER BY a.date DESC, a.workerid ASC
              LIMIT 200`,
             params
         );
@@ -356,7 +364,7 @@ app.post('/api/attendance', requireAuth, async (req, res) => {
     const client = await pool.connect();
     try {
         const existing = await client.query(
-            'SELECT id FROM public.attendance WHERE date=$1 AND worker_id=$2',
+            'SELECT id FROM public.attendance WHERE date=$1 AND workerid=$2',
             [date, worker_id]
         );
 
@@ -364,16 +372,30 @@ app.post('/api/attendance', requireAuth, async (req, res) => {
         if (existing.rowCount) {
             q = await client.query(
                 `UPDATE public.attendance
-                 SET in_time=$1, out_time=$2, visit_time_from=$3, visit_time_to=$4
+                 SET intime=$1, outtime=$2, visittimefrom=$3, visittimeto=$4
                  WHERE id=$5
-                 RETURNING id, date, worker_id, in_time, out_time, visit_time_from, visit_time_to`,
+                 RETURNING
+                    id,
+                    date,
+                    workerid AS worker_id,
+                    intime AS in_time,
+                    outtime AS out_time,
+                    visittimefrom AS visit_time_from,
+                    visittimeto AS visit_time_to`,
                 [in_time || null, out_time || null, visit_time_from || null, visit_time_to || null, existing.rows[0].id]
             );
         } else {
             q = await client.query(
-                `INSERT INTO public.attendance(date, worker_id, in_time, out_time, visit_time_from, visit_time_to)
+                `INSERT INTO public.attendance(date, workerid, intime, outtime, visittimefrom, visittimeto)
                  VALUES($1,$2,$3,$4,$5,$6)
-                 RETURNING id, date, worker_id, in_time, out_time, visit_time_from, visit_time_to`,
+                 RETURNING
+                    id,
+                    date,
+                    workerid AS worker_id,
+                    intime AS in_time,
+                    outtime AS out_time,
+                    visittimefrom AS visit_time_from,
+                    visittimeto AS visit_time_to`,
                 [date, worker_id, in_time || null, out_time || null, visit_time_from || null, visit_time_to || null]
             );
         }
