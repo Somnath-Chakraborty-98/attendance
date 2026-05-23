@@ -32,17 +32,29 @@ document.addEventListener('DOMContentLoaded', () => {
       message.textContent = '';
       message.className = 'message';
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          message.textContent = json.error || 'Login failed';
+          message.className = 'message error';
+          return;
+        }
 
-      if (error) {
-        message.textContent = error.message;
+        // store token and redirect
+        localStorage.setItem('token', json.token);
+        message.textContent = 'Login successful! Redirecting...';
+        message.className = 'message success';
+        setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+      } catch (err) {
+        console.error('login error', err);
+        message.textContent = 'Login failed (network)';
         message.className = 'message error';
-        return;
       }
-
-      message.textContent = 'Login successful! Redirecting...';
-      message.className = 'message success';
-      setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
     });
   }
 
@@ -62,36 +74,79 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { name } }
-      });
+      try {
+        const res = await fetch('/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, name })
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          console.error('signup error', json);
+          message.textContent = json.error || 'Signup failed';
+          message.className = 'message error';
+          return;
+        }
 
-      if (error) {
-        message.textContent = error.message;
+        // Inform user to confirm their email and offer a sign-in button
+        message.textContent = 'Account created! A confirmation email has been sent. Please confirm your email address before signing in.';
+        message.className = 'message success';
+
+        // Remove any previous action button
+        const existingAction = document.getElementById('authActionButton');
+        if (existingAction) existingAction.remove();
+
+        // Create a button to let user go to the sign-in form
+        const loginBtn = document.createElement('button');
+        loginBtn.id = 'authActionButton';
+        loginBtn.textContent = 'Go to Sign In';
+        loginBtn.className = 'btn btn-primary';
+        loginBtn.style.marginTop = '8px';
+        loginBtn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          signupBox.style.display = 'none';
+          loginBox.style.display = 'block';
+          // clear the message once navigated to sign-in
+          message.textContent = '';
+        });
+
+        // Append a small break and the button to the message container
+        message.appendChild(document.createElement('br'));
+        message.appendChild(loginBtn);
+      } catch (err) {
+        console.error('signup network error', err);
+        message.textContent = 'Signup failed (network)';
         message.className = 'message error';
-        return;
       }
-
-      message.textContent = 'Account created! You can now log in.';
-      message.className = 'message success';
-      signupBox.style.display = 'none';
-      loginBox.style.display = 'block';
     });
   }
 });
 
 async function checkAuth() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
+  const token = localStorage.getItem('token');
+  if (!token) {
     window.location.href = 'index.html';
     return null;
   }
-  return session;
+
+  try {
+    const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      localStorage.removeItem('token');
+      window.location.href = 'index.html';
+      return null;
+    }
+    const json = await res.json();
+    return json.user;
+  } catch (err) {
+    console.error('checkAuth error', err);
+    localStorage.removeItem('token');
+    window.location.href = 'index.html';
+    return null;
+  }
 }
 
 async function signOut() {
-  await supabase.auth.signOut();
+  localStorage.removeItem('token');
   window.location.href = 'index.html';
 }
