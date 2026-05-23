@@ -7,7 +7,12 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 require('dotenv').config();
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 10000,
+    max: 1
+});
 const app = express();
 
 const allowedOrigin = process.env.SITE_URL || '*';
@@ -18,17 +23,40 @@ const transporter = nodemailer.createTransport({
     host: process.env.ZOHO_SMTP_HOST,
     port: Number(process.env.ZOHO_SMTP_PORT) || 465,
     secure: String(process.env.ZOHO_SMTP_PORT) === '465',
-    auth: { user: process.env.ZOHO_SMTP_USER, pass: process.env.ZOHO_SMTP_PASS }
+    auth: { user: process.env.ZOHO_SMTP_USER, pass: process.env.ZOHO_SMTP_PASS },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000
 });
 
 function signJwt(payload) {
     return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
+app.get('/api/health', (req, res) => {
+    res.json({
+        ok: true,
+        env: {
+            DATABASE_URL: Boolean(process.env.DATABASE_URL),
+            JWT_SECRET: Boolean(process.env.JWT_SECRET),
+            SITE_URL: Boolean(process.env.SITE_URL),
+            ZOHO_SMTP_HOST: Boolean(process.env.ZOHO_SMTP_HOST),
+            ZOHO_SMTP_PORT: Boolean(process.env.ZOHO_SMTP_PORT),
+            ZOHO_SMTP_USER: Boolean(process.env.ZOHO_SMTP_USER),
+            ZOHO_SMTP_PASS: Boolean(process.env.ZOHO_SMTP_PASS),
+            ZOHO_FROM_EMAIL: Boolean(process.env.ZOHO_FROM_EMAIL)
+        }
+    });
+});
+
 app.post('/api/signup', async (req, res) => {
     const { email, password, name } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
     if (password.length < 6) return res.status(400).json({ error: 'Password too short' });
+    if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL is missing' });
+    if (!process.env.ZOHO_SMTP_HOST || !process.env.ZOHO_SMTP_USER || !process.env.ZOHO_SMTP_PASS || !process.env.ZOHO_FROM_EMAIL) {
+        return res.status(500).json({ error: 'Email settings are missing' });
+    }
 
     const client = await pool.connect();
     try {
@@ -96,6 +124,8 @@ app.get('/api/verify', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
+    if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL is missing' });
+    if (!process.env.JWT_SECRET) return res.status(500).json({ error: 'JWT_SECRET is missing' });
     const client = await pool.connect();
     try {
         const q = await client.query('SELECT id, password_hash, is_verified, name FROM public.users WHERE email=$1', [email]);
