@@ -28,13 +28,13 @@ body {
 .auth-card {
   background: #ffffff;
   border-radius: 12px;
-  padding: 40px 32px;
+  padding: 28px 32px 32px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
 .auth-header {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 
 .auth-header h1 {
@@ -65,6 +65,100 @@ body {
   background: #fde8e8;
   color: #c41e3a;
   border: 1px solid #f5c6cb;
+}
+
+/* ── Toast notifications (auth page) ── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+  max-width: 340px;
+  animation: toast-in 0.25s ease;
+}
+
+.toast.toast-out {
+  animation: toast-out 0.25s ease forwards;
+}
+
+.toast.success {
+  background: #0d7d40;
+  color: #fff;
+}
+
+.toast.error {
+  background: #c41e3a;
+  color: #fff;
+}
+
+.toast.info {
+  background: #ffffff;
+  color: #1a1a2e;
+  border: 1px solid #e5e7eb;
+}
+
+.toast.neutral {
+  background: rgba(26, 26, 46, 0.92);
+  color: #fff;
+}
+
+.toast-action {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+.toast-action:hover {
+  opacity: 1;
+}
+
+.toast.info .toast-action {
+  color: #0f3460;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(24px);
+  }
 }
 
 .form-group {

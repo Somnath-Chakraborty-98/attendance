@@ -1,3 +1,47 @@
+const TOAST_DURATION = 4500;
+
+function resolveToastType(text, explicitType) {
+  if (/already registered|already exists|account exist/i.test(text)) return 'info';
+  return explicitType || 'neutral';
+}
+
+function showToast(text, type, options = {}) {
+  const container = document.getElementById('toast-container');
+  if (!container || !text) return;
+
+  const toastType = resolveToastType(text, type);
+  const duration = options.duration ?? TOAST_DURATION;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${toastType}`;
+  toast.textContent = text;
+
+  if (options.action) {
+    const actionBtn = document.createElement('button');
+    actionBtn.type = 'button';
+    actionBtn.className = 'toast-action';
+    actionBtn.textContent = options.action.label;
+    actionBtn.addEventListener('click', () => {
+      options.action.onClick();
+      dismissToast(toast);
+    });
+    toast.appendChild(document.createElement('br'));
+    toast.appendChild(actionBtn);
+  }
+
+  container.appendChild(toast);
+
+  const timer = setTimeout(() => dismissToast(toast), duration);
+  toast._dismissTimer = timer;
+}
+
+function dismissToast(toast) {
+  if (!toast || toast.classList.contains('toast-out')) return;
+  clearTimeout(toast._dismissTimer);
+  toast.classList.add('toast-out');
+  toast.addEventListener('animationend', () => toast.remove(), { once: true });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const loginForm = document.getElementById('loginForm');
   const signupForm = document.getElementById('signupForm');
@@ -5,31 +49,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleLogin = document.getElementById('toggleLogin');
   const loginBox = document.getElementById('loginBox');
   const signupBox = document.getElementById('signupBox');
-  const message = document.getElementById('message');
 
-  async function readResponse(res) {
-    const text = await res.text();
-    if (!text) return {};
-    try {
-      return JSON.parse(text);
-    } catch (err) {
-      return { error: text };
-    }
+  function switchToLogin() {
+    signupBox.style.display = 'none';
+    loginBox.style.display = 'block';
+  }
+
+  function switchToSignup() {
+    loginBox.style.display = 'none';
+    signupBox.style.display = 'block';
   }
 
   if (toggleSignup && toggleLogin) {
     toggleSignup.addEventListener('click', (e) => {
       e.preventDefault();
-      loginBox.style.display = 'none';
-      signupBox.style.display = 'block';
-      message.textContent = '';
+      switchToSignup();
     });
 
     toggleLogin.addEventListener('click', (e) => {
       e.preventDefault();
-      signupBox.style.display = 'none';
-      loginBox.style.display = 'block';
-      message.textContent = '';
+      switchToLogin();
     });
   }
 
@@ -40,8 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const password = document.getElementById('loginPassword').value;
       const submitButton = loginForm.querySelector('button[type="submit"]');
 
-      message.textContent = 'Signing in...';
-      message.className = 'message';
+      showToast('Signing in...', 'neutral');
       if (submitButton) submitButton.disabled = true;
 
       try {
@@ -52,20 +90,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const json = await readResponse(res);
         if (!res.ok) {
-          message.textContent = json.error || 'Login failed';
-          message.className = 'message error';
+          const errorText = json.error || 'Login failed';
+          showToast(errorText, resolveToastType(errorText, 'error'));
           return;
         }
 
-        // store token and redirect
         localStorage.setItem('token', json.token);
-        message.textContent = 'Login successful! Redirecting...';
-        message.className = 'message success';
+        showToast('Login successful! Redirecting...', 'success', { duration: 2000 });
         setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
       } catch (err) {
         console.error('login error', err);
-        message.textContent = 'Login failed (network)';
-        message.className = 'message error';
+        showToast('Login failed (network)', 'error');
       } finally {
         if (submitButton) submitButton.disabled = false;
       }
@@ -80,13 +115,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const name = document.getElementById('signupName').value;
       const submitButton = signupForm.querySelector('button[type="submit"]');
 
-      message.textContent = 'Creating account...';
-      message.className = 'message';
+      showToast('Creating account...', 'neutral');
       if (submitButton) submitButton.disabled = true;
 
       if (password.length < 6) {
-        message.textContent = 'Password must be at least 6 characters.';
-        message.className = 'message error';
+        showToast('Password must be at least 6 characters.', 'error');
         if (submitButton) submitButton.disabled = false;
         return;
       }
@@ -100,46 +133,41 @@ document.addEventListener('DOMContentLoaded', () => {
         const json = await readResponse(res);
         if (!res.ok) {
           console.error('signup error', json);
-          message.textContent = json.error || 'Signup failed';
-          message.className = 'message error';
+          const errorText = json.error || 'Signup failed';
+          showToast(errorText, resolveToastType(errorText, 'error'));
           return;
         }
 
-        // Inform user to confirm their email and offer a sign-in button
-        message.textContent = 'Account created! A confirmation email has been sent. Please confirm your email address before signing in.';
-        message.className = 'message success';
-
-        // Remove any previous action button
-        const existingAction = document.getElementById('authActionButton');
-        if (existingAction) existingAction.remove();
-
-        // Create a button to let user go to the sign-in form
-        const loginBtn = document.createElement('button');
-        loginBtn.id = 'authActionButton';
-        loginBtn.textContent = 'Go to Sign In';
-        loginBtn.className = 'btn btn-primary';
-        loginBtn.style.marginTop = '8px';
-        loginBtn.addEventListener('click', (ev) => {
-          ev.preventDefault();
-          signupBox.style.display = 'none';
-          loginBox.style.display = 'block';
-          // clear the message once navigated to sign-in
-          message.textContent = '';
-        });
-
-        // Append a small break and the button to the message container
-        message.appendChild(document.createElement('br'));
-        message.appendChild(loginBtn);
+        showToast(
+          'Account created! A confirmation email has been sent. Please confirm your email before signing in.',
+          'success',
+          {
+            duration: 8000,
+            action: {
+              label: 'Go to Sign In',
+              onClick: switchToLogin
+            }
+          }
+        );
       } catch (err) {
         console.error('signup network error', err);
-        message.textContent = 'Signup failed (network)';
-        message.className = 'message error';
+        showToast('Signup failed (network)', 'error');
       } finally {
         if (submitButton) submitButton.disabled = false;
       }
     });
   }
 });
+
+async function readResponse(res) {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return { error: text };
+  }
+}
 
 async function checkAuth() {
   const token = localStorage.getItem('token');
