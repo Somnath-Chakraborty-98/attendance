@@ -713,26 +713,30 @@ body {
   align-items: flex-end;
 }
 
-.records-filter {
-  display: flex;
-  flex-wrap: wrap;
+.records-filter-grid {
+  display: grid;
+  grid-template-columns: 160px 160px minmax(180px, 1fr) auto auto;
   gap: 16px;
-  align-items: flex-end;
+  align-items: end;
 }
 
-.records-filter-field {
-  flex: 0 0 180px;
+.records-filter-grid .form-group {
   margin-bottom: 0;
 }
 
-.records-filter-to {
-  flex: 0 0 200px;
+.records-filter-field input,
+.records-filter-field select {
+  width: 100%;
 }
 
 .records-filter-employee {
-  flex: 1 1 200px;
-  min-width: 180px;
-  max-width: 280px;
+  min-width: 0;
+}
+
+.records-filter-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .records-filter-actions {
@@ -740,17 +744,20 @@ body {
   gap: 8px;
   align-items: center;
   flex-shrink: 0;
-  padding-bottom: 0;
 }
 
 .records-filter-actions .btn {
   margin-left: 0;
   white-space: nowrap;
+  height: 42px;
 }
 
 .records-filter-export {
-  margin-left: auto;
   flex-shrink: 0;
+}
+
+.records-filter-export .btn {
+  height: 42px;
 }
 
 .export-menu {
@@ -879,28 +886,18 @@ body {
     border-bottom-color: #4299e1;
   }
 
-  .records-filter {
-    flex-direction: column;
-    align-items: stretch;
+  .records-filter-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .records-filter-field,
-  .records-filter-employee {
-    flex: 1 1 100%;
-    max-width: none;
+  .records-filter-employee,
+  .records-filter-actions,
+  .records-filter-export {
+    grid-column: 1 / -1;
   }
 
   .records-filter-actions {
-    width: 100%;
-  }
-
-  .records-filter-export {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .export-menu {
-    width: 100%;
+    justify-content: flex-start;
   }
 
   .export-menu .btn {

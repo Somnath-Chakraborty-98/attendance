@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const user = await checkAuth();
   if (!user) return;
   if (!user.is_admin) {
-    window.location.href = 'dashboard.html';
+    window.location.href = ROUTES.dashboard;
     return;
   }
 

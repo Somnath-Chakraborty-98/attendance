@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('token', json.token);
         clearForm(loginForm);
         showToast('Login successful! Redirecting...', 'success', { duration: 2000 });
-        setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+        setTimeout(() => { window.location.href = ROUTES.dashboard; }, 800);
       } catch (err) {
         console.error('login error', err);
         showToast('Login failed (network)', 'error');
@@ -228,7 +228,7 @@ async function readResponse(res) {
 async function checkAuth() {
   const token = localStorage.getItem('token');
   if (!token) {
-    window.location.href = 'index.html';
+    window.location.href = ROUTES.login;
     return null;
   }
 
@@ -236,7 +236,7 @@ async function checkAuth() {
     const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {
       localStorage.removeItem('token');
-      window.location.href = 'index.html';
+      window.location.href = ROUTES.login;
       return null;
     }
     const json = await res.json();
@@ -244,12 +244,12 @@ async function checkAuth() {
   } catch (err) {
     console.error('checkAuth error', err);
     localStorage.removeItem('token');
-    window.location.href = 'index.html';
+    window.location.href = ROUTES.login;
     return null;
   }
 }
 
 async function signOut() {
   localStorage.removeItem('token');
-  window.location.href = 'index.html';
+  window.location.href = ROUTES.login;
 }

@@ -19,18 +19,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRecordsFilter();
   initMasters();
   setDefaultAttendanceDate();
-  handleHashNavigation();
+  activateTab('attendance');
+  if (window.history.replaceState) {
+    history.replaceState(null, '', ROUTES.dashboard);
+  }
 
   await loadEmployees();
   if (currentUser.is_admin) await loadDepartments();
 });
-
-function handleHashNavigation() {
-  const hash = window.location.hash.replace('#', '');
-  if (hash === 'records' || hash === 'masters' || hash === 'attendance') {
-    activateTab(hash);
-  }
-}
 
 function initSettingsMenu() {
   const btn = document.getElementById('settingsBtn');
@@ -65,6 +61,9 @@ function initTabs() {
       e.preventDefault();
       if (item.dataset.tab === 'masters' && !currentUser.is_admin) return;
       activateTab(item.dataset.tab);
+      if (window.history.replaceState) {
+        history.replaceState(null, '', ROUTES.dashboard);
+      }
     });
   });
 }

@@ -331,7 +331,7 @@ app.post('/api/signup', async (req, res) => {
             [userId, token, expiresAt]
         );
 
-        const verifyLink = `${siteUrl()}/verify.html?token=${token}`;
+        const verifyLink = `${siteUrl()}/verify?token=${token}`;
         await sendMail({
             to: email,
             subject: 'Confirm your StanzaHR account',
@@ -397,7 +397,7 @@ app.post('/api/forgot-password', async (req, res) => {
                 [user.id, token, expiresAt]
             );
 
-            const resetLink = `${siteUrl()}/reset-password.html?token=${token}`;
+            const resetLink = `${siteUrl()}/reset-password?token=${token}`;
             await sendMail({
                 to: email,
                 subject: 'Reset your StanzaHR password',
