@@ -53,7 +53,34 @@ function dismissToast(toast) {
   toast.addEventListener('animationend', () => toast.remove(), { once: true });
 }
 
+function initPasswordToggles() {
+  document.querySelectorAll('input[type="password"]').forEach((input) => {
+    if (input.closest('.password-field')) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'password-field';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'password-toggle';
+    btn.textContent = 'Show';
+    btn.setAttribute('aria-label', 'Show password');
+
+    btn.addEventListener('click', () => {
+      const hidden = input.type === 'password';
+      input.type = hidden ? 'text' : 'password';
+      btn.textContent = hidden ? 'Hide' : 'Show';
+      btn.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+    });
+
+    wrap.appendChild(btn);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initPasswordToggles();
   const loginForm = document.getElementById('loginForm');
   const signupForm = document.getElementById('signupForm');
   const toggleSignup = document.getElementById('toggleSignup');
