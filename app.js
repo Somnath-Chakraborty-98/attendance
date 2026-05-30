@@ -102,6 +102,73 @@ function siteUrl() {
     return (process.env.SITE_URL || 'http://localhost:5500').replace(/\/$/, '');
 }
 
+function getMailFrom() {
+    const email = (process.env.ZOHO_FROM_EMAIL || process.env.ZOHO_SMTP_USER || '').trim();
+    const name = (process.env.ZOHO_FROM_NAME || 'StanzaHR').trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new Error('ZOHO_FROM_EMAIL must be a valid email address (e.g. noreply@yourdomain.com)');
+    }
+    return name ? `"${name.replace(/"/g, '')}" <${email}>` : email;
+}
+
+function emailConfigured() {
+    return Boolean(
+        process.env.ZOHO_SMTP_HOST &&
+        process.env.ZOHO_SMTP_USER &&
+        process.env.ZOHO_SMTP_PASS &&
+        (process.env.ZOHO_FROM_EMAIL || process.env.ZOHO_SMTP_USER)
+    );
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function buildVerificationEmail(name, verifyLink) {
+    const brand = process.env.ZOHO_FROM_NAME || 'StanzaHR';
+    return `
+<!DOCTYPE html>
+<html>
+<body style="font-family:Segoe UI,sans-serif;background:#f0f2f5;padding:24px;margin:0;">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <h2 style="color:#1a1a2e;margin:0 0 8px;">${escapeHtml(brand)}</h2>
+    <p style="color:#666;font-size:14px;margin:0 0 24px;">Confirm your email address</p>
+    <p style="color:#334155;font-size:14px;line-height:1.6;">Hi ${escapeHtml(name || 'there')},</p>
+    <p style="color:#334155;font-size:14px;line-height:1.6;">Thanks for signing up. Click the button below to verify your account. This link expires in 24 hours.</p>
+    <p style="margin:28px 0;">
+      <a href="${verifyLink}" style="display:inline-block;background:#0f3460;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Confirm Email</a>
+    </p>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.5;">If you did not create an account, you can ignore this email.</p>
+  </div>
+</body>
+</html>`;
+}
+
+function buildResetEmail(name, resetLink) {
+    const brand = process.env.ZOHO_FROM_NAME || 'StanzaHR';
+    return `
+<!DOCTYPE html>
+<html>
+<body style="font-family:Segoe UI,sans-serif;background:#f0f2f5;padding:24px;margin:0;">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <h2 style="color:#1a1a2e;margin:0 0 8px;">${escapeHtml(brand)}</h2>
+    <p style="color:#666;font-size:14px;margin:0 0 24px;">Password reset</p>
+    <p style="color:#334155;font-size:14px;line-height:1.6;">Hi ${escapeHtml(name || 'there')},</p>
+    <p style="color:#334155;font-size:14px;line-height:1.6;">Click the button below to reset your password. This link expires in 1 hour.</p>
+    <p style="margin:28px 0;">
+      <a href="${resetLink}" style="display:inline-block;background:#0f3460;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Reset Password</a>
+    </p>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.5;">If you did not request this, you can ignore this email.</p>
+  </div>
+</body>
+</html>`;
+}
+
 function timeToMinutes(t) {
     if (!t) return 0;
     const parts = String(t).split(':').map(Number);
@@ -168,9 +235,9 @@ async function uploadDocument(file) {
 
 async function sendMail(options) {
     await withTimeout(transporter.sendMail({
-        from: process.env.ZOHO_FROM_EMAIL,
+        from: getMailFrom(),
         ...options
-    }), 8000, 'Email timed out');
+    }), 15000, 'Email timed out');
 }
 
 app.get('/api/health', (req, res) => {
@@ -228,14 +295,27 @@ app.post('/api/signup', async (req, res) => {
     if (pwdErr) return res.status(400).json({ error: pwdErr });
 
     if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL is missing' });
-    if (!process.env.ZOHO_SMTP_HOST || !process.env.ZOHO_SMTP_USER || !process.env.ZOHO_SMTP_PASS || !process.env.ZOHO_FROM_EMAIL) {
-        return res.status(500).json({ error: 'Email settings are missing' });
+    if (!emailConfigured()) return res.status(500).json({ error: 'Email settings are missing' });
+
+    let client;
+    try {
+        getMailFrom();
+    } catch (err) {
+        console.error('signup mail config error', err.message);
+        return res.status(500).json({
+            error: 'Email sender is misconfigured. Set ZOHO_FROM_EMAIL to your Zoho email address and ZOHO_FROM_NAME to the display name (e.g. StanzaHR).'
+        });
     }
 
-    const client = await pool.connect();
+    client = await pool.connect();
     try {
+        await client.query('BEGIN');
+
         const exists = await client.query('SELECT id FROM public.users WHERE email=$1', [email]);
-        if (exists.rowCount) return res.status(409).json({ error: 'Email already registered' });
+        if (exists.rowCount) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Email already registered' });
+        }
 
         const hash = await bcrypt.hash(password, 10);
         const insert = await client.query(
@@ -255,15 +335,24 @@ app.post('/api/signup', async (req, res) => {
         await sendMail({
             to: email,
             subject: 'Confirm your StanzaHR account',
-            html: `<p>Hi ${name || ''},</p><p>Please confirm your email by clicking the link below:</p><p><a href="${verifyLink}">Confirm email</a></p>`
+            html: buildVerificationEmail(name, verifyLink)
         });
 
+        await client.query('COMMIT');
         res.json({ message: 'confirmation_sent' });
     } catch (err) {
+        if (client) await client.query('ROLLBACK').catch(() => {});
         console.error('signup error', err);
-        res.status(500).json({ error: 'server_error' });
+        const msg = err.message || '';
+        if (/invalid|recipient|sender|auth|credentials|535|550|553/i.test(msg)) {
+            return res.status(500).json({ error: 'Could not send verification email. Check Zoho SMTP settings and that ZOHO_FROM_EMAIL matches your Zoho account.' });
+        }
+        if (/timed out/i.test(msg)) {
+            return res.status(500).json({ error: 'Verification email timed out. Please try again.' });
+        }
+        res.status(500).json({ error: 'Signup failed. Please try again.' });
     } finally {
-        client.release();
+        if (client) client.release();
     }
 });
 
@@ -312,7 +401,7 @@ app.post('/api/forgot-password', async (req, res) => {
             await sendMail({
                 to: email,
                 subject: 'Reset your StanzaHR password',
-                html: `<p>Hi ${user.name || ''},</p><p>Click the link below to reset your password. This link expires in 1 hour.</p><p><a href="${resetLink}">Reset password</a></p>`
+                html: buildResetEmail(user.name, resetLink)
             });
         }
         res.json({ message: 'If an account exists for that email, a reset link has been sent.' });
