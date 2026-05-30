@@ -81,7 +81,10 @@ async function apiRequest(path, options = {}) {
   const text = await res.text();
   let json = {};
   if (text) {
-    try { json = JSON.parse(text); } catch { json = { error: text }; }
+    try { json = JSON.parse(text); } catch {
+      const plain = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      json = { error: plain.length > 120 ? 'Request failed' : plain };
+    }
   }
   if (!res.ok) throw new Error(json.error || 'Request failed');
   return json;
@@ -220,7 +223,8 @@ function initEmployeeForm() {
 
     try {
       if (editId) {
-        await apiRequest(`/api/employees/${encodeURIComponent(editId)}`, { method: 'PUT', body: formData });
+        formData.append('id', editId);
+        await apiRequest('/api/employees/update', { method: 'POST', body: formData });
         showToast('Employee updated.', 'success');
       } else {
         await apiRequest('/api/employees', { method: 'POST', body: formData });

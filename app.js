@@ -656,13 +656,22 @@ app.post('/api/employees', requireAuth, requireAdmin, upload.single('document'),
     }
 });
 
-app.put('/api/employees/:id', requireAuth, requireAdmin, upload.single('document'), async (req, res) => {
+app.put('/api/employees/:id', requireAuth, requireAdmin, upload.single('document'), handleEmployeeUpdate);
+app.post('/api/employees/update', requireAuth, requireAdmin, upload.single('document'), (req, res) => {
+    req.params.id = req.body.id;
+    return handleEmployeeUpdate(req, res);
+});
+
+async function handleEmployeeUpdate(req, res) {
+    const employeeId = req.params.id;
+    if (!employeeId) return res.status(400).json({ error: 'Employee ID is required' });
+
     const { name, mobile, email_id, department_id, remove_document } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Employee name is required' });
 
     const client = await pool.connect();
     try {
-        const existing = await client.query('SELECT documents FROM public.employees WHERE id=$1', [req.params.id]);
+        const existing = await client.query('SELECT documents FROM public.employees WHERE id=$1', [employeeId]);
         if (!existing.rowCount) return res.status(404).json({ error: 'Employee not found' });
 
         let documents = existing.rows[0].documents;
@@ -685,7 +694,7 @@ app.put('/api/employees/:id', requireAuth, requireAdmin, upload.single('document
                 email_id || null,
                 department_id ? Number(department_id) : null,
                 documents,
-                req.params.id
+                employeeId
             ]
         );
         res.json({ employee: q.rows[0] });
@@ -695,7 +704,7 @@ app.put('/api/employees/:id', requireAuth, requireAdmin, upload.single('document
     } finally {
         client.release();
     }
-});
+}
 
 app.delete('/api/employees/:id', requireAuth, requireAdmin, async (req, res) => {
     const client = await pool.connect();
