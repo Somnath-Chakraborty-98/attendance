@@ -5,9 +5,20 @@ function resolveToastType(text, explicitType) {
   return explicitType || 'neutral';
 }
 
+function clearAllToasts() {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  container.querySelectorAll('.toast').forEach((toast) => {
+    clearTimeout(toast._dismissTimer);
+    toast.remove();
+  });
+}
+
 function showToast(text, type, options = {}) {
   const container = document.getElementById('toast-container');
   if (!container || !text) return;
+
+  clearAllToasts();
 
   const toastType = resolveToastType(text, type);
   const duration = options.duration ?? TOAST_DURATION;
@@ -50,12 +61,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginBox = document.getElementById('loginBox');
   const signupBox = document.getElementById('signupBox');
 
+  function clearForm(form) {
+    if (form) form.reset();
+  }
+
+  function clearAuthForms() {
+    clearForm(loginForm);
+    clearForm(signupForm);
+  }
+
   function switchToLogin() {
+    clearAuthForms();
     signupBox.style.display = 'none';
     loginBox.style.display = 'block';
   }
 
   function switchToSignup() {
+    clearAuthForms();
     loginBox.style.display = 'none';
     signupBox.style.display = 'block';
   }
@@ -96,6 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         localStorage.setItem('token', json.token);
+        clearForm(loginForm);
         showToast('Login successful! Redirecting...', 'success', { duration: 2000 });
         setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
       } catch (err) {
@@ -149,6 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }
         );
+        clearForm(signupForm);
       } catch (err) {
         console.error('signup network error', err);
         showToast('Signup failed (network)', 'error');
