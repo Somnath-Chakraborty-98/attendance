@@ -592,14 +592,31 @@ async function deleteAttendance(id) {
 
 function initRecordsFilter() {
   document.getElementById('btnFilter').addEventListener('click', loadRecords);
-  document.getElementById('btnExport').addEventListener('click', exportRecords);
-  document.getElementById('btnExportExcel').addEventListener('click', exportRecordsExcel);
   document.getElementById('btnClearFilter').addEventListener('click', () => {
     document.getElementById('filterDateFrom').value = '';
     document.getElementById('filterDateTo').value = '';
     document.getElementById('filterEmployee').value = '';
     document.getElementById('recordsContainer').innerHTML =
       '<p class="text-center records-empty">Use filters to view records</p>';
+  });
+
+  const exportBtn = document.getElementById('btnExportMenu');
+  const exportDropdown = document.getElementById('exportDropdown');
+  exportBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exportDropdown.classList.toggle('open');
+  });
+  document.addEventListener('click', () => exportDropdown.classList.remove('open'));
+
+  exportDropdown.querySelectorAll('.export-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportDropdown.classList.remove('open');
+      const format = item.dataset.format;
+      if (format === 'csv') exportRecords();
+      else if (format === 'excel') exportRecordsExcel();
+      else if (format === 'pdf') exportRecordsPdf();
+    });
   });
 }
 
@@ -729,13 +746,14 @@ function recordsToRows(attendance) {
 }
 
 async function exportRecords() {
-  const btn = document.getElementById('btnExport');
+  const btn = document.getElementById('btnExportMenu');
   btn.disabled = true;
   try {
     const attendance = await fetchRecordsForExport();
     if (!attendance) return;
     const csv = recordsToRows(attendance).map(row => row.map(csvCell).join(',')).join('\r\n');
     downloadFile(csv, `stanzahr-records-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    showToast('CSV exported.', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -744,7 +762,7 @@ async function exportRecords() {
 }
 
 async function exportRecordsExcel() {
-  const btn = document.getElementById('btnExportExcel');
+  const btn = document.getElementById('btnExportMenu');
   btn.disabled = true;
   try {
     const attendance = await fetchRecordsForExport();
@@ -755,6 +773,47 @@ async function exportRecordsExcel() {
     ).join('');
     const html = `<html><head><meta charset="UTF-8"></head><body><table>${tableRows}</table></body></html>`;
     downloadFile(html, `stanzahr-records-${new Date().toISOString().slice(0, 10)}.xls`, 'application/vnd.ms-excel');
+    showToast('Excel exported.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function exportRecordsPdf() {
+  const btn = document.getElementById('btnExportMenu');
+  btn.disabled = true;
+  try {
+    const attendance = await fetchRecordsForExport();
+    if (!attendance) return;
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      showToast('PDF library failed to load.', 'error');
+      return;
+    }
+    const rows = recordsToRows(attendance);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    doc.setFontSize(14);
+    doc.setTextColor(26, 26, 46);
+    doc.text('StanzaHR — Attendance Records', 14, 14);
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Exported ${stamp}`, 14, 20);
+
+    doc.autoTable({
+      head: [rows[0]],
+      body: rows.slice(1),
+      startY: 24,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [15, 52, 96], textColor: 255 },
+      alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+
+    doc.save(`stanzahr-records-${stamp}.pdf`);
+    showToast('PDF exported.', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   } finally {

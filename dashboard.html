@@ -135,27 +135,37 @@
         </div>
 
         <div class="filter-bar form-panel">
-          <div class="form-row filter-row">
-            <div class="form-group">
+          <div class="records-filter">
+            <div class="form-group records-filter-field">
               <label for="filterDateFrom">From Date</label>
               <input type="date" id="filterDateFrom">
             </div>
-            <div class="form-group">
+            <div class="form-group records-filter-field records-filter-to">
               <label for="filterDateTo">To Date</label>
               <input type="date" id="filterDateTo">
               <small class="field-hint">Leave empty for single-day view</small>
             </div>
-            <div class="form-group">
+            <div class="form-group records-filter-field records-filter-employee">
               <label for="filterEmployee">Employee</label>
               <select id="filterEmployee">
                 <option value="">All Employees</option>
               </select>
             </div>
-            <div class="form-group filter-actions">
+            <div class="records-filter-actions">
               <button class="btn btn-primary" id="btnFilter" type="button">Filter</button>
-              <button class="btn btn-secondary" id="btnExport" type="button">Export CSV</button>
-              <button class="btn btn-secondary" id="btnExportExcel" type="button">Export Excel</button>
               <button class="btn btn-secondary" id="btnClearFilter" type="button">Clear</button>
+            </div>
+            <div class="records-filter-export">
+              <div class="export-menu">
+                <button class="btn btn-secondary" id="btnExportMenu" type="button">
+                  Export <span class="dropdown-caret">▾</span>
+                </button>
+                <div class="export-dropdown" id="exportDropdown">
+                  <button type="button" class="export-item" data-format="csv">CSV</button>
+                  <button type="button" class="export-item" data-format="excel">Excel</button>
+                  <button type="button" class="export-item" data-format="pdf">PDF</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -273,6 +283,8 @@
   </div>
 
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="js/duration.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/dashboard.js"></script>
