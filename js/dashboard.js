@@ -1,4 +1,7 @@
 let currentUser = null;
+let employeesCache = [];
+let todayAttendanceCache = [];
+let isEditMode = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   currentUser = await checkAuth();
@@ -6,421 +9,779 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('userName').textContent = currentUser.name || currentUser.email;
 
+  if (currentUser.is_admin) {
+    document.querySelectorAll('.admin-only').forEach(el => { el.style.display = ''; });
+  }
+
+  initSettingsMenu();
   initTabs();
-  initWorkerForm();
   initAttendanceForm();
   initRecordsFilter();
+  initMasters();
   setDefaultAttendanceDate();
-  await loadWorkers();
+  handleHashNavigation();
+
+  await loadEmployees();
+  if (currentUser.is_admin) await loadDepartments();
 });
+
+function handleHashNavigation() {
+  const hash = window.location.hash.replace('#', '');
+  if (hash === 'records' || hash === 'masters' || hash === 'attendance') {
+    activateTab(hash);
+  }
+}
+
+function initSettingsMenu() {
+  const btn = document.getElementById('settingsBtn');
+  const dropdown = document.getElementById('settingsDropdown');
+  if (!btn || !dropdown) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle('open');
+  });
+  document.addEventListener('click', () => dropdown.classList.remove('open'));
+}
+
+function activateTab(tab) {
+  const navItems = document.querySelectorAll('.sidebar .nav-item[data-tab]');
+  navItems.forEach(n => {
+    n.classList.toggle('active', n.dataset.tab === tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+  const panel = document.getElementById('tab-' + tab);
+  if (panel) panel.style.display = 'block';
+  if (tab === 'attendance') showTodayAttendance();
+  if (tab === 'masters' && currentUser.is_admin) {
+    loadDepartments();
+    loadEmployeesTable();
+  }
+}
+
+function initTabs() {
+  document.querySelectorAll('.sidebar .nav-item[data-tab]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (item.dataset.tab === 'masters' && !currentUser.is_admin) return;
+      activateTab(item.dataset.tab);
+    });
+  });
+}
 
 async function apiRequest(path, options = {}) {
   const token = localStorage.getItem('token');
-  const headers = {
-    ...(options.headers || {}),
-    Authorization: `Bearer ${token}`
-  };
+  const headers = { ...(options.headers || {}), Authorization: `Bearer ${token}` };
 
-  if (options.body && !headers['Content-Type']) {
+  if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
   const res = await fetch(path, { ...options, headers });
   const text = await res.text();
   let json = {};
-
   if (text) {
-    try {
-      json = JSON.parse(text);
-    } catch (err) {
-      json = { error: text };
-    }
+    try { json = JSON.parse(text); } catch { json = { error: text }; }
   }
-
-  if (!res.ok) {
-    throw new Error(json.error || 'Request failed');
-  }
-
+  if (!res.ok) throw new Error(json.error || 'Request failed');
   return json;
 }
 
-function initTabs() {
-  const navItems = document.querySelectorAll('.nav-item');
-  navItems.forEach(item => {
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      const tab = item.dataset.tab;
-      navItems.forEach(n => n.classList.remove('active'));
-      item.classList.add('active');
-      document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
-      document.getElementById('tab-' + tab).style.display = 'block';
+// ── Employees ──
 
-      if (tab === 'attendance') showTodayAttendance();
-    });
-  });
+async function loadEmployees() {
+  try {
+    const { employees } = await apiRequest('/api/employees');
+    employeesCache = employees || [];
+    populateEmployeeDropdowns(employeesCache);
+  } catch (err) {
+    console.error(err);
+    employeesCache = [];
+    populateEmployeeDropdowns([]);
+  }
 }
 
-async function loadWorkers() {
-  const tbody = document.getElementById('workersTableBody');
-  tbody.innerHTML = '<tr><td colspan="3" class="text-center">Loading...</td></tr>';
+function populateEmployeeDropdowns(employees) {
+  const attOpts = '<option value="">Select Employee</option>' +
+    employees.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  const filterOpts = '<option value="">All Employees</option>' +
+    employees.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+
+  const attEl = document.getElementById('attEmployee');
+  const filterEl = document.getElementById('filterEmployee');
+  const deptFormEl = document.getElementById('employeeDepartment');
+  if (attEl) attEl.innerHTML = attOpts;
+  if (filterEl) filterEl.innerHTML = filterOpts;
+}
+
+async function loadEmployeesTable() {
+  const tbody = document.getElementById('employeesTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" class="text-center">Loading...</td></tr>';
 
   try {
-    const { workers } = await apiRequest('/api/workers');
+    const { employees } = await apiRequest('/api/employees');
+    employeesCache = employees || [];
 
-    if (!workers || workers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3" class="text-center">No workers added yet</td></tr>';
-      populateWorkerDropdowns([]);
+    if (!employees.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center">No employees added yet</td></tr>';
+      populateDepartmentDropdown([]);
       return;
     }
 
-    tbody.innerHTML = workers.map(w => `
+    tbody.innerHTML = employees.map(e => `
       <tr>
-        <td>${escapeHtml(w.worker_id)}</td>
-        <td>${escapeHtml(w.name)}</td>
+        <td>${escapeHtml(e.name)}</td>
+        <td>${escapeHtml(e.mobile || '-')}</td>
+        <td>${escapeHtml(e.email_id || '-')}</td>
+        <td>${escapeHtml(e.department_name || '-')}</td>
+        <td>${e.documents ? `<a href="${escapeHtml(e.documents)}" target="_blank" rel="noopener">View</a>` : '-'}</td>
         <td class="actions-cell">
-          <button class="btn btn-sm btn-primary" onclick="editWorker('${escapeJs(w.id)}', '${escapeJs(w.worker_id)}', '${escapeJs(w.name)}')">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteWorker('${escapeJs(w.id)}', '${escapeJs(w.worker_id)}')">Delete</button>
+          <button class="btn btn-sm btn-primary" onclick="editEmployeeById('${escapeJs(String(e.id))}')">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteEmployee('${escapeJs(String(e.id))}', '${escapeJs(e.name)}')">Delete</button>
         </td>
       </tr>
     `).join('');
 
-    populateWorkerDropdowns(workers);
+    populateEmployeeDropdowns(employees);
+    await loadDepartmentsForForm();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="3" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
-function populateWorkerDropdowns(workers) {
-  const opts = '<option value="">Select Worker</option>' +
-    workers.map(w => `<option value="${escapeHtml(w.worker_id)}">${escapeHtml(w.name)} (${escapeHtml(w.worker_id)})</option>`).join('');
-
-  ['attWorker', 'filterWorker'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = opts;
-  });
+function editEmployeeById(id) {
+  const emp = employeesCache.find(e => String(e.id) === String(id));
+  if (emp) editEmployee(emp);
 }
 
-function initWorkerForm() {
-  document.getElementById('btnAddWorker').addEventListener('click', () => {
-    document.getElementById('workerForm').reset();
-    document.getElementById('workerEditId').value = '';
-    document.getElementById('workerFormTitle').textContent = 'Add Worker';
-    document.getElementById('addWorkerForm').style.display = 'block';
+function editEmployee(emp) {
+  document.getElementById('employeeEditId').value = emp.id;
+  document.getElementById('employeeName').value = emp.name || '';
+  document.getElementById('employeeMobile').value = emp.mobile || '';
+  document.getElementById('employeeEmail').value = emp.email_id || '';
+  document.getElementById('employeeDepartment').value = emp.department_id || '';
+  document.getElementById('employeeDocument').value = '';
+  document.getElementById('employeeFormTitle').textContent = 'Edit Employee';
+
+  const docEl = document.getElementById('currentDocument');
+  if (emp.documents) {
+    docEl.style.display = 'block';
+    docEl.innerHTML = `Current: <a href="${escapeHtml(emp.documents)}" target="_blank">View document</a>
+      <label class="checkbox-label"><input type="checkbox" id="removeDocument"> Remove document</label>`;
+  } else {
+    docEl.style.display = 'none';
+    docEl.innerHTML = '';
+  }
+
+  document.getElementById('addEmployeeForm').style.display = 'block';
+}
+
+async function deleteEmployee(id, name) {
+  if (!confirm(`Delete employee "${name}"? This will also remove their attendance records.`)) return;
+  try {
+    await apiRequest(`/api/employees/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    showToast('Employee deleted.', 'success');
+    await loadEmployees();
+    await loadEmployeesTable();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function initEmployeeForm() {
+  document.getElementById('btnAddEmployee').addEventListener('click', async () => {
+    document.getElementById('employeeForm').reset();
+    document.getElementById('employeeEditId').value = '';
+    document.getElementById('employeeFormTitle').textContent = 'Add Employee';
+    document.getElementById('currentDocument').style.display = 'none';
+    await loadDepartmentsForForm();
+    document.getElementById('addEmployeeForm').style.display = 'block';
   });
 
-  document.getElementById('btnCancelWorker').addEventListener('click', () => {
-    document.getElementById('addWorkerForm').style.display = 'none';
+  document.getElementById('btnCancelEmployee').addEventListener('click', () => {
+    document.getElementById('addEmployeeForm').style.display = 'none';
   });
 
-  document.getElementById('workerForm').addEventListener('submit', async (e) => {
+  document.getElementById('employeeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const editId = document.getElementById('workerEditId').value;
-    const worker_id = document.getElementById('workerId').value.trim();
-    const name = document.getElementById('workerName').value.trim();
+    const editId = document.getElementById('employeeEditId').value;
+    const formData = new FormData();
+    formData.append('name', document.getElementById('employeeName').value.trim());
+    formData.append('mobile', document.getElementById('employeeMobile').value.trim());
+    formData.append('email_id', document.getElementById('employeeEmail').value.trim());
+    formData.append('department_id', document.getElementById('employeeDepartment').value);
 
-    if (!worker_id || !name) return;
+    const fileInput = document.getElementById('employeeDocument');
+    if (fileInput.files[0]) formData.append('document', fileInput.files[0]);
+
+    const removeDoc = document.getElementById('removeDocument');
+    if (removeDoc && removeDoc.checked) formData.append('remove_document', 'true');
 
     try {
       if (editId) {
-        await apiRequest(`/api/workers/${encodeURIComponent(editId)}`, {
-          method: 'PUT',
-          body: JSON.stringify({ worker_id, name })
-        });
+        await apiRequest(`/api/employees/${encodeURIComponent(editId)}`, { method: 'PUT', body: formData });
+        showToast('Employee updated.', 'success');
       } else {
-        await apiRequest('/api/workers', {
-          method: 'POST',
-          body: JSON.stringify({ worker_id, name })
-        });
+        await apiRequest('/api/employees', { method: 'POST', body: formData });
+        showToast('Employee added.', 'success');
       }
-
-      document.getElementById('addWorkerForm').style.display = 'none';
-      await loadWorkers();
+      document.getElementById('addEmployeeForm').style.display = 'none';
+      await loadEmployees();
+      await loadEmployeesTable();
     } catch (err) {
-      alert(err.message);
+      showToast(err.message, 'error');
     }
   });
 }
 
-function editWorker(id, worker_id, name) {
-  document.getElementById('workerEditId').value = id;
-  document.getElementById('workerId').value = worker_id;
-  document.getElementById('workerName').value = name;
-  document.getElementById('workerFormTitle').textContent = 'Edit Worker';
-  document.getElementById('addWorkerForm').style.display = 'block';
-}
-
-async function deleteWorker(id, worker_id) {
-  if (!confirm(`Delete worker "${worker_id}"? This cannot be undone.`)) return;
-
+async function loadDepartmentsForForm() {
   try {
-    await apiRequest(`/api/workers/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    await loadWorkers();
+    const { departments } = await apiRequest('/api/departments');
+    populateDepartmentDropdown(departments || []);
   } catch (err) {
-    alert(err.message);
+    populateDepartmentDropdown([]);
   }
 }
 
+function populateDepartmentDropdown(departments) {
+  const el = document.getElementById('employeeDepartment');
+  if (!el) return;
+  el.innerHTML = '<option value="">Select Department</option>' +
+    departments.map(d => `<option value="${d.id}">${escapeHtml(d.dep_name)}</option>`).join('');
+}
+
+// ── Departments ──
+
+async function loadDepartments() {
+  const tbody = document.getElementById('departmentsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="2" class="text-center">Loading...</td></tr>';
+
+  try {
+    const { departments } = await apiRequest('/api/departments');
+    if (!departments || !departments.length) {
+      tbody.innerHTML = '<tr><td colspan="2" class="text-center">No departments yet</td></tr>';
+      populateDepartmentDropdown([]);
+      return;
+    }
+
+    tbody.innerHTML = departments.map(d => `
+      <tr>
+        <td>${escapeHtml(d.dep_name)}</td>
+        <td class="actions-cell">
+          <button class="btn btn-sm btn-primary" onclick="editDepartment('${escapeJs(String(d.id))}', '${escapeJs(d.dep_name)}')">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteDepartment('${escapeJs(String(d.id))}', '${escapeJs(d.dep_name)}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+    populateDepartmentDropdown(departments);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="2" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function editDepartment(id, name) {
+  document.getElementById('departmentEditId').value = id;
+  document.getElementById('departmentName').value = name;
+  document.getElementById('addDepartmentForm').style.display = 'block';
+}
+
+async function deleteDepartment(id, name) {
+  if (!confirm(`Delete department "${name}"?`)) return;
+  try {
+    await apiRequest(`/api/departments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    showToast('Department deleted.', 'success');
+    await loadDepartments();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function initDepartmentForm() {
+  document.getElementById('btnAddDepartment').addEventListener('click', () => {
+    document.getElementById('departmentForm').reset();
+    document.getElementById('departmentEditId').value = '';
+    document.getElementById('addDepartmentForm').style.display = 'block';
+  });
+
+  document.getElementById('btnCancelDepartment').addEventListener('click', () => {
+    document.getElementById('addDepartmentForm').style.display = 'none';
+  });
+
+  document.getElementById('departmentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const editId = document.getElementById('departmentEditId').value;
+    const dep_name = document.getElementById('departmentName').value.trim();
+    try {
+      if (editId) {
+        await apiRequest(`/api/departments/${encodeURIComponent(editId)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ dep_name })
+        });
+        showToast('Department updated.', 'success');
+      } else {
+        await apiRequest('/api/departments', {
+          method: 'POST',
+          body: JSON.stringify({ dep_name })
+        });
+        showToast('Department added.', 'success');
+      }
+      document.getElementById('addDepartmentForm').style.display = 'none';
+      await loadDepartments();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+}
+
+function initMasters() {
+  document.querySelectorAll('.masters-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.masters-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('master-departments').style.display =
+        tab.dataset.master === 'departments' ? 'block' : 'none';
+      document.getElementById('master-employees').style.display =
+        tab.dataset.master === 'employees' ? 'block' : 'none';
+    });
+  });
+
+  if (currentUser && currentUser.is_admin) {
+    initDepartmentForm();
+    initEmployeeForm();
+  }
+}
+
+// ── Attendance helpers ──
+
+function timeToMinutes(t) {
+  if (!t) return 0;
+  const p = String(t).split(':').map(Number);
+  return p[0] * 60 + (p[1] || 0);
+}
+
+function minutesToDisplay(m) {
+  if (m == null || m <= 0) return '—';
+  const h = Math.floor(m / 60);
+  const min = Math.round(m % 60);
+  return `${h}h ${String(min).padStart(2, '0')}m`;
+}
+
+function calcTotalDisplay(inTime, outTime, breakTime) {
+  if (!inTime || !outTime) return '—';
+  let total = timeToMinutes(outTime) - timeToMinutes(inTime);
+  if (breakTime) total -= pgIntervalToMinutes(breakTime);
+  return total > 0 ? minutesToDisplay(total) : '0h 00m';
+}
+
+function formatTime(t) {
+  if (!t) return '—';
+  return String(t).slice(0, 5);
+}
+
+function updateTotalTimePreview() {
+  const el = document.getElementById('attTotalTime');
+  if (!el) return;
+  el.textContent = calcTotalDisplay(
+    document.getElementById('attInTime').value,
+    document.getElementById('attOutTime').value,
+    document.getElementById('attBreakTime').value
+  );
+}
+
+function updateVisitSectionVisibility() {
+  const from = document.getElementById('attVisitFrom').value;
+  const to = document.getElementById('attVisitTo').value;
+  const section = document.getElementById('visitSection');
+  const body = document.getElementById('visitBody');
+  const hasData = Boolean(from || to);
+
+  if (hasData || isEditMode) {
+    section.classList.remove('collapsed');
+    body.style.display = 'block';
+  } else {
+    section.classList.add('collapsed');
+    body.style.display = 'none';
+  }
+}
+
+function setLeaveMode(onLeave) {
+  const fields = document.getElementById('attendanceFields');
+  if (onLeave) {
+    fields.style.display = 'none';
+    document.getElementById('attInTime').value = '';
+    document.getElementById('attOutTime').value = '';
+    document.getElementById('attBreakTime').value = '';
+    document.getElementById('attVisitFrom').value = '';
+    document.getElementById('attVisitTo').value = '';
+    document.getElementById('attTotalTime').textContent = '—';
+  } else {
+    fields.style.display = 'block';
+    updateVisitSectionVisibility();
+    updateTotalTimePreview();
+  }
+}
+
+function resetAttendanceForm() {
+  isEditMode = false;
+  document.getElementById('attendanceForm').reset();
+  setDefaultAttendanceDate();
+  document.getElementById('attLeave').checked = false;
+  document.getElementById('breakTimeGroup').style.display = 'none';
+  setLeaveMode(false);
+  updateVisitSectionVisibility();
+}
+
 function setDefaultAttendanceDate() {
-  const attDateInput = document.getElementById('attDate');
-  if (attDateInput) attDateInput.value = new Date().toISOString().split('T')[0];
+  const el = document.getElementById('attDate');
+  if (el) el.value = new Date().toISOString().split('T')[0];
 }
 
 function initAttendanceForm() {
+  const leaveCb = document.getElementById('attLeave');
+  const visitToggle = document.getElementById('visitToggle');
+
+  leaveCb.addEventListener('change', () => setLeaveMode(leaveCb.checked));
+
+  visitToggle.addEventListener('click', () => {
+    const body = document.getElementById('visitBody');
+    const section = document.getElementById('visitSection');
+    const collapsed = section.classList.toggle('collapsed');
+    body.style.display = collapsed ? 'none' : 'block';
+  });
+
+  ['attInTime', 'attOutTime', 'attBreakTime'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateTotalTimePreview);
+  });
+
+  ['attVisitFrom', 'attVisitTo'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateVisitSectionVisibility);
+  });
+
+  document.getElementById('attEmployee').addEventListener('change', () => {
+    isEditMode = false;
+    document.getElementById('breakTimeGroup').style.display = 'none';
+  });
+
   document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const date = document.getElementById('attDate').value;
-    const worker_id = document.getElementById('attWorker').value;
-    const in_time = document.getElementById('attInTime').value || null;
-    const out_time = document.getElementById('attOutTime').value || null;
-    const visit_time_from = document.getElementById('attVisitFrom').value || null;
-    const visit_time_to = document.getElementById('attVisitTo').value || null;
-    const msg = document.getElementById('attMessage');
+    const onLeave = document.getElementById('attLeave').checked;
+    const payload = {
+      date: document.getElementById('attDate').value,
+      employee_id: Number(document.getElementById('attEmployee').value),
+      leave: onLeave,
+      in_time: onLeave ? null : (document.getElementById('attInTime').value || null),
+      out_time: onLeave ? null : (document.getElementById('attOutTime').value || null),
+      break_time: onLeave ? null : (document.getElementById('attBreakTime').value || null),
+      visit_time_from: onLeave ? null : (document.getElementById('attVisitFrom').value || null),
+      visit_time_to: onLeave ? null : (document.getElementById('attVisitTo').value || null)
+    };
 
-    if (!date || !worker_id) return;
+    if (!payload.date || !payload.employee_id) return;
 
     try {
       await apiRequest('/api/attendance', {
         method: 'POST',
-        body: JSON.stringify({ date, worker_id, in_time, out_time, visit_time_from, visit_time_to })
+        body: JSON.stringify(payload)
       });
-
-      msg.textContent = 'Attendance saved!';
-      msg.className = 'message success';
-      msg.style.display = 'block';
-      setTimeout(() => { msg.style.display = 'none'; }, 2000);
+      showToast('Attendance saved.', 'success');
+      resetAttendanceForm();
       showTodayAttendance();
     } catch (err) {
-      msg.textContent = err.message;
-      msg.className = 'message error';
-      msg.style.display = 'block';
+      showToast(err.message, 'error');
     }
   });
 
-  const attDateInput = document.getElementById('attDate');
-  if (attDateInput) {
-    attDateInput.addEventListener('change', showTodayAttendance);
-  }
+  document.getElementById('attDate').addEventListener('change', showTodayAttendance);
+
+  document.getElementById('breakTimeGroup').style.display = 'none';
+  updateVisitSectionVisibility();
 }
 
 async function showTodayAttendance() {
   const date = document.getElementById('attDate').value;
   const tbody = document.getElementById('todayAttendanceBody');
   if (!date) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Select a date</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center">Select a date</td></tr>';
     return;
   }
 
   try {
     const { attendance } = await apiRequest(`/api/attendance?date=${encodeURIComponent(date)}`);
-
-    if (!attendance || attendance.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center">No records for this date</td></tr>';
+    todayAttendanceCache = attendance || [];
+    if (!attendance || !attendance.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center">No records for this date</td></tr>';
       return;
     }
 
-    tbody.innerHTML = attendance.map(a => `
-      <tr>
+    tbody.innerHTML = attendance.map(a => {
+      if (a.leave) {
+        return `<tr class="leave-row">
+          <td>${escapeHtml(a.name || '')}</td>
+          <td colspan="6" class="leave-label">On leave</td>
+          <td class="actions-cell">
+            <button class="btn btn-sm btn-primary" onclick="loadAttendanceForEditById('${escapeJs(String(a.id))}')">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteAttendance('${escapeJs(String(a.id))}')">Delete</button>
+          </td>
+        </tr>`;
+      }
+      return `<tr>
         <td>${escapeHtml(a.name || '')}</td>
-        <td>${a.in_time || '-'}</td>
-        <td>${a.out_time || '-'}</td>
-        <td>${a.visit_time_from || '-'}</td>
-        <td>${a.visit_time_to || '-'}</td>
-        <td>
-          <button class="btn btn-sm btn-danger" onclick="deleteAttendance('${escapeJs(a.id)}')">Delete</button>
+        <td>${formatTime(a.in_time)}</td>
+        <td>${formatTime(a.out_time)}</td>
+        <td>${formatTime(a.visit_time_from)}</td>
+        <td>${formatTime(a.visit_time_to)}</td>
+        <td>${formatDuration(a.break_time)}</td>
+        <td>${a.total_time || calcTotalDisplay(a.in_time, a.out_time, a.break_time)}</td>
+        <td class="actions-cell">
+          <button class="btn btn-sm btn-primary" onclick="loadAttendanceForEditById('${escapeJs(String(a.id))}')">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteAttendance('${escapeJs(String(a.id))}')">Delete</button>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
   }
+}
+
+function loadAttendanceForEditById(id) {
+  const a = todayAttendanceCache.find(r => String(r.id) === String(id));
+  if (a) loadAttendanceForEdit(a);
+}
+
+function loadAttendanceForEdit(a) {
+  isEditMode = true;
+  document.getElementById('attDate').value = a.date;
+  document.getElementById('attEmployee').value = a.employee_id;
+  document.getElementById('attLeave').checked = Boolean(a.leave);
+  document.getElementById('breakTimeGroup').style.display = 'block';
+
+  if (a.leave) {
+    setLeaveMode(true);
+  } else {
+    setLeaveMode(false);
+    document.getElementById('attInTime').value = a.in_time ? String(a.in_time).slice(0, 5) : '';
+    document.getElementById('attOutTime').value = a.out_time ? String(a.out_time).slice(0, 5) : '';
+    document.getElementById('attBreakTime').value = durationToInputValue(a.break_time);
+    document.getElementById('attVisitFrom').value = a.visit_time_from ? String(a.visit_time_from).slice(0, 5) : '';
+    document.getElementById('attVisitTo').value = a.visit_time_to ? String(a.visit_time_to).slice(0, 5) : '';
+    updateVisitSectionVisibility();
+    updateTotalTimePreview();
+  }
+
+  document.getElementById('attendanceForm').scrollIntoView({ behavior: 'smooth' });
 }
 
 async function deleteAttendance(id) {
   if (!confirm('Delete this attendance record?')) return;
-
   try {
     await apiRequest(`/api/attendance/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    showToast('Record deleted.', 'success');
     showTodayAttendance();
   } catch (err) {
-    alert(err.message);
+    showToast(err.message, 'error');
   }
 }
+
+// ── Records ──
 
 function initRecordsFilter() {
   document.getElementById('btnFilter').addEventListener('click', loadRecords);
   document.getElementById('btnExport').addEventListener('click', exportRecords);
   document.getElementById('btnExportExcel').addEventListener('click', exportRecordsExcel);
   document.getElementById('btnClearFilter').addEventListener('click', () => {
-    document.getElementById('filterDate').value = '';
-    document.getElementById('filterWorker').value = '';
-    document.getElementById('recordsTableBody').innerHTML =
-      '<tr><td colspan="7" class="text-center">Use filters to view records</td></tr>';
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    document.getElementById('filterEmployee').value = '';
+    document.getElementById('recordsContainer').innerHTML =
+      '<p class="text-center records-empty">Use filters to view records</p>';
   });
 }
 
 function getRecordFilterParams() {
-  const date = document.getElementById('filterDate').value;
-  const workerId = document.getElementById('filterWorker').value;
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo = document.getElementById('filterDateTo').value;
+  const employeeId = document.getElementById('filterEmployee').value;
   const params = new URLSearchParams();
 
-  if (date) params.set('date', date);
-  if (workerId) params.set('worker_id', workerId);
-
+  if (dateFrom) {
+    params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+  }
+  if (employeeId) params.set('employee_id', employeeId);
   return params;
 }
 
-async function loadRecords() {
-  const tbody = document.getElementById('recordsTableBody');
-  const params = getRecordFilterParams();
+function renderRecordsGrouped(attendance) {
+  const container = document.getElementById('recordsContainer');
+  const grouped = {};
 
-  tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading...</td></tr>';
+  attendance.forEach(a => {
+    const d = a.date;
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(a);
+  });
+
+  const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+  let html = '';
+
+  dates.forEach(date => {
+    html += `<div class="records-date-group">
+      <h4 class="records-date-heading">${escapeHtml(date)}</h4>
+      <div class="table-container">
+        <table class="table table-attendance">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>In Time</th>
+              <th>Out Time</th>
+              <th>Visit From</th>
+              <th>Visit To</th>
+              <th>Break</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+    grouped[date].forEach(a => {
+      if (a.leave) {
+        html += `<tr class="leave-row">
+          <td>${escapeHtml(a.name || '')}</td>
+          <td colspan="5" class="leave-label">On leave</td>
+          <td>—</td>
+        </tr>`;
+      } else {
+        html += `<tr>
+          <td>${escapeHtml(a.name || '')}</td>
+          <td>${formatTime(a.in_time)}</td>
+          <td>${formatTime(a.out_time)}</td>
+          <td>${formatTime(a.visit_time_from)}</td>
+          <td>${formatTime(a.visit_time_to)}</td>
+          <td>${formatDuration(a.break_time)}</td>
+          <td>${a.total_time || calcTotalDisplay(a.in_time, a.out_time, a.break_time)}</td>
+        </tr>`;
+      }
+    });
+
+    html += '</tbody></table></div></div>';
+  });
+
+  container.innerHTML = html;
+}
+
+async function loadRecords() {
+  const container = document.getElementById('recordsContainer');
+  const dateFrom = document.getElementById('filterDateFrom').value;
+
+  if (!dateFrom) {
+    showToast('Please select a from date.', 'error');
+    return;
+  }
+
+  container.innerHTML = '<p class="text-center records-empty">Loading...</p>';
 
   try {
-    const { attendance } = await apiRequest(`/api/attendance?${params.toString()}`);
-
-    if (!attendance || attendance.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center">No records found</td></tr>';
+    const { attendance } = await apiRequest(`/api/attendance?${getRecordFilterParams().toString()}`);
+    if (!attendance || !attendance.length) {
+      container.innerHTML = '<p class="text-center records-empty">No records found</p>';
       return;
     }
-
-    tbody.innerHTML = attendance.map(a => `
-      <tr>
-        <td>${a.date}</td>
-        <td>${escapeHtml(a.worker_id)}</td>
-        <td>${escapeHtml(a.name || '')}</td>
-        <td>${a.in_time || '-'}</td>
-        <td>${a.out_time || '-'}</td>
-        <td>${a.visit_time_from || '-'}</td>
-        <td>${a.visit_time_to || '-'}</td>
-      </tr>
-    `).join('');
+    renderRecordsGrouped(attendance);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
+    container.innerHTML = `<p class="text-center records-empty">Error: ${escapeHtml(err.message)}</p>`;
   }
 }
 
+async function fetchRecordsForExport() {
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  if (!dateFrom) {
+    showToast('Please select a from date before exporting.', 'error');
+    return null;
+  }
+  const { attendance } = await apiRequest(`/api/attendance?${getRecordFilterParams().toString()}`);
+  if (!attendance || !attendance.length) {
+    showToast('No records to export.', 'info');
+    return null;
+  }
+  return attendance;
+}
+
+function recordsToRows(attendance) {
+  return [
+    ['Date', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To', 'Break', 'Total', 'Status'],
+    ...attendance.map(a => [
+      a.date || '',
+      a.name || '',
+      a.leave ? '' : (a.in_time || ''),
+      a.leave ? '' : (a.out_time || ''),
+      a.leave ? '' : (a.visit_time_from || ''),
+      a.leave ? '' : (a.visit_time_to || ''),
+      a.leave ? '' : formatDuration(a.break_time),
+      a.leave ? '' : (a.total_time || ''),
+      a.leave ? 'On leave' : 'Present'
+    ])
+  ];
+}
+
 async function exportRecords() {
-  const exportButton = document.getElementById('btnExport');
-  const params = getRecordFilterParams();
-
-  exportButton.disabled = true;
-  exportButton.textContent = 'Exporting...';
-
+  const btn = document.getElementById('btnExport');
+  btn.disabled = true;
   try {
-    const { attendance } = await apiRequest(`/api/attendance?${params.toString()}`);
-    if (!attendance || attendance.length === 0) {
-      alert('No records to export.');
-      return;
-    }
-
-    const rows = [
-      ['Date', 'Worker ID', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To'],
-      ...attendance.map(a => [
-        a.date || '',
-        a.worker_id || '',
-        a.name || '',
-        a.in_time || '',
-        a.out_time || '',
-        a.visit_time_from || '',
-        a.visit_time_to || ''
-      ])
-    ];
-
-    const csv = rows.map(row => row.map(csvCell).join(',')).join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const stamp = new Date().toISOString().slice(0, 10);
-
-    link.href = url;
-    link.download = `attendance-records-${stamp}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    const attendance = await fetchRecordsForExport();
+    if (!attendance) return;
+    const csv = recordsToRows(attendance).map(row => row.map(csvCell).join(',')).join('\r\n');
+    downloadFile(csv, `stanzahr-records-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
   } catch (err) {
-    alert(err.message);
+    showToast(err.message, 'error');
   } finally {
-    exportButton.disabled = false;
-    exportButton.textContent = 'Export CSV';
+    btn.disabled = false;
   }
 }
 
 async function exportRecordsExcel() {
-  const exportButton = document.getElementById('btnExportExcel');
-  const params = getRecordFilterParams();
-
-  exportButton.disabled = true;
-  exportButton.textContent = 'Exporting...';
-
+  const btn = document.getElementById('btnExportExcel');
+  btn.disabled = true;
   try {
-    const { attendance } = await apiRequest(`/api/attendance?${params.toString()}`);
-    if (!attendance || attendance.length === 0) {
-      alert('No records to export.');
-      return;
-    }
-
-    const rows = [
-      ['Date', 'Worker ID', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To'],
-      ...attendance.map(a => [
-        a.date || '',
-        a.worker_id || '',
-        a.name || '',
-        a.in_time || '',
-        a.out_time || '',
-        a.visit_time_from || '',
-        a.visit_time_to || ''
-      ])
-    ];
-
+    const attendance = await fetchRecordsForExport();
+    if (!attendance) return;
+    const rows = recordsToRows(attendance);
     const tableRows = rows.map(row =>
-      '<tr>' + row.map(value => `<td>${escapeHtml(value)}</td>`).join('') + '</tr>'
+      '<tr>' + row.map(v => `<td>${escapeHtml(String(v))}</td>`).join('') + '</tr>'
     ).join('');
-    const workbook = `
-      <html>
-        <head><meta charset="UTF-8"></head>
-        <body><table>${tableRows}</table></body>
-      </html>
-    `;
-    const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const stamp = new Date().toISOString().slice(0, 10);
-
-    link.href = url;
-    link.download = `attendance-records-${stamp}.xls`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    const html = `<html><head><meta charset="UTF-8"></head><body><table>${tableRows}</table></body></html>`;
+    downloadFile(html, `stanzahr-records-${new Date().toISOString().slice(0, 10)}.xls`, 'application/vnd.ms-excel');
   } catch (err) {
-    alert(err.message);
+    showToast(err.message, 'error');
   } finally {
-    exportButton.disabled = false;
-    exportButton.textContent = 'Export Excel';
+    btn.disabled = false;
   }
 }
 
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type: `${type};charset=utf-8;` });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function csvCell(value) {
-  const text = String(value ?? '');
-  return `"${text.replace(/"/g, '""')}"`;
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
 function escapeHtml(str) {
-  if (!str) return '';
+  if (str == null) return '';
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 function escapeJs(str) {
   if (!str) return '';
-  return String(str)
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r');
+  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
 }

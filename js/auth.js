@@ -60,6 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleLogin = document.getElementById('toggleLogin');
   const loginBox = document.getElementById('loginBox');
   const signupBox = document.getElementById('signupBox');
+  const passwordHintEl = document.getElementById('passwordHint');
+  if (passwordHintEl && typeof passwordHint === 'function') {
+    passwordHintEl.textContent = passwordHint();
+  }
 
   function clearForm(form) {
     if (form) form.reset();
@@ -141,8 +145,9 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Creating account...', 'neutral');
       if (submitButton) submitButton.disabled = true;
 
-      if (password.length < 6) {
-        showToast('Password must be at least 6 characters.', 'error');
+      const pwdErr = typeof passwordErrorMessage === 'function' ? passwordErrorMessage(password) : null;
+      if (pwdErr) {
+        showToast(pwdErr, 'error');
         if (submitButton) submitButton.disabled = false;
         return;
       }

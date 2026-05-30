@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Attendance System - Login</title>
+  <title>StanzaHR - Login</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="auth-page">
   <div class="auth-container">
     <div class="auth-card">
       <div class="auth-header">
-        <h1>Attendance System</h1>
+        <h1>StanzaHR</h1>
         <p>Log in to manage workforce attendance</p>
       </div>
 
@@ -26,6 +26,9 @@
           </div>
           <button type="submit" class="btn btn-primary btn-full">Sign In</button>
         </form>
+        <p class="auth-switch auth-forgot">
+          <a href="forgot-password.html">Forgot password?</a>
+        </p>
         <p class="auth-switch">
           Don't have an account?
           <a href="#" id="toggleSignup">Create one</a>
@@ -44,7 +47,8 @@
           </div>
           <div class="form-group">
             <label for="signupPassword">Password</label>
-            <input type="password" id="signupPassword" required placeholder="Min 6 characters">
+            <input type="password" id="signupPassword" required placeholder="Enter a strong password">
+            <small class="field-hint" id="passwordHint"></small>
           </div>
           <button type="submit" class="btn btn-primary btn-full">Create Account</button>
         </form>
@@ -58,6 +62,7 @@
 
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
+  <script src="js/password.js"></script>
   <script src="js/auth.js"></script>
 </body>
 </html>

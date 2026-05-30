@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StanzaHR - Email Verification</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-container">
+    <div class="auth-card auth-status-card">
+      <div class="auth-header">
+        <h1>StanzaHR</h1>
+        <p id="statusSubtitle">Verifying your email...</p>
+      </div>
+      <div id="statusIcon" class="status-icon status-loading">⏳</div>
+      <p id="statusMessage" class="status-message">Please wait while we confirm your email address.</p>
+      <a id="statusAction" href="index.html" class="btn btn-primary btn-full" style="display:none;">Go to Sign In</a>
+    </div>
+  </div>
+  <script>
+    (async function () {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      const subtitle = document.getElementById('statusSubtitle');
+      const icon = document.getElementById('statusIcon');
+      const message = document.getElementById('statusMessage');
+      const action = document.getElementById('statusAction');
+
+      if (!token) {
+        subtitle.textContent = 'Verification failed';
+        icon.className = 'status-icon status-error';
+        icon.textContent = '✕';
+        message.textContent = 'Invalid verification link. Please sign up again or contact support.';
+        action.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/verify?token=' + encodeURIComponent(token));
+        const json = await res.json().catch(() => ({}));
+        if (res.ok) {
+          subtitle.textContent = 'Email verified';
+          icon.className = 'status-icon status-success';
+          icon.textContent = '✓';
+          message.textContent = 'Your email has been confirmed. You can now sign in to StanzaHR.';
+        } else {
+          subtitle.textContent = 'Verification failed';
+          icon.className = 'status-icon status-error';
+          icon.textContent = '✕';
+          message.textContent = json.error || 'This verification link is invalid or has expired.';
+        }
+      } catch (err) {
+        subtitle.textContent = 'Verification failed';
+        icon.className = 'status-icon status-error';
+        icon.textContent = '✕';
+        message.textContent = 'Network error. Please try again later.';
+      }
+      action.style.display = 'block';
+    })();
+  </script>
+</body>
+</html>

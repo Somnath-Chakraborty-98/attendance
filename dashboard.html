@@ -3,73 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Attendance System - Dashboard</title>
+  <title>StanzaHR - Dashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="dashboard-page">
   <nav class="navbar">
-    <div class="nav-brand">Attendance System</div>
+    <div class="nav-brand">StanzaHR</div>
     <div class="nav-user">
       <span id="userName"></span>
-      <button class="btn btn-sm btn-outline" onclick="signOut()">Logout</button>
+      <div class="settings-menu">
+        <button class="btn btn-sm btn-outline settings-btn" id="settingsBtn" type="button" aria-label="Settings">⚙</button>
+        <div class="settings-dropdown" id="settingsDropdown">
+          <a href="users.html" class="settings-item admin-only" id="usersMenuItem" style="display:none;">Users</a>
+          <button type="button" class="settings-item" onclick="signOut()">Logout</button>
+        </div>
+      </div>
     </div>
   </nav>
 
   <div class="dashboard">
     <aside class="sidebar">
       <nav>
-        <a href="#" class="nav-item active" data-tab="workers">Workers</a>
-        <a href="#" class="nav-item" data-tab="attendance">Mark Attendance</a>
+        <a href="#" class="nav-item active" data-tab="attendance">Mark Attendance</a>
         <a href="#" class="nav-item" data-tab="records">View Records</a>
+        <a href="#" class="nav-item admin-only" data-tab="masters" id="mastersNav" style="display:none;">Masters</a>
       </nav>
     </aside>
 
     <main class="main-content">
 
-      <section id="tab-workers" class="tab-content">
-        <div class="section-header">
-          <h2>Workers</h2>
-          <button class="btn btn-primary" id="btnAddWorker">+ Add Worker</button>
-        </div>
-
-        <div id="addWorkerForm" class="form-panel" style="display:none;">
-          <h3 id="workerFormTitle">Add Worker</h3>
-          <form id="workerForm">
-            <input type="hidden" id="workerEditId">
-            <div class="form-row">
-              <div class="form-group">
-                <label for="workerId">Worker ID</label>
-                <input type="text" id="workerId" required placeholder="e.g. W001">
-              </div>
-              <div class="form-group">
-                <label for="workerName">Worker Name</label>
-                <input type="text" id="workerName" required placeholder="Enter full name">
-              </div>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary" id="btnSaveWorker">Save</button>
-              <button type="button" class="btn btn-secondary" id="btnCancelWorker">Cancel</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="table-container">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Worker ID</th>
-                <th>Name</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="workersTableBody">
-              <tr><td colspan="3" class="text-center">Loading...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="tab-attendance" class="tab-content" style="display:none;">
+      <!-- Mark Attendance -->
+      <section id="tab-attendance" class="tab-content">
         <div class="section-header">
           <h2>Mark Attendance</h2>
         </div>
@@ -81,43 +45,70 @@
               <input type="date" id="attDate" required>
             </div>
             <div class="form-group">
-              <label for="attWorker">Worker</label>
-              <select id="attWorker" required>
-                <option value="">Select Worker</option>
+              <label for="attEmployee">Employee</label>
+              <select id="attEmployee" required>
+                <option value="">Select Employee</option>
               </select>
             </div>
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="attInTime">In Time</label>
-              <input type="time" id="attInTime">
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="attLeave"> On Leave
+            </label>
+          </div>
+
+          <div id="attendanceFields">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="attInTime">In Time</label>
+                <input type="time" id="attInTime">
+              </div>
+              <div class="form-group">
+                <label for="attOutTime">Out Time</label>
+                <input type="time" id="attOutTime">
+              </div>
+              <div class="form-group edit-only-field" id="breakTimeGroup">
+                <label for="attBreakTime">Break Duration</label>
+                <input type="time" id="attBreakTime" title="Hours and minutes of break">
+                <small class="field-hint">Duration (e.g. 01:30 = 1 hour 30 min break)</small>
+              </div>
             </div>
+
+            <div class="collapsible-section" id="visitSection">
+              <button type="button" class="collapsible-toggle" id="visitToggle">
+                Visit Time <span class="toggle-icon">▼</span>
+              </button>
+              <div class="collapsible-body" id="visitBody">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="attVisitFrom">Visit From</label>
+                    <input type="time" id="attVisitFrom">
+                  </div>
+                  <div class="form-group">
+                    <label for="attVisitTo">Visit To</label>
+                    <input type="time" id="attVisitTo">
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="form-group">
-              <label for="attOutTime">Out Time</label>
-              <input type="time" id="attOutTime">
+              <label>Total Time</label>
+              <div id="attTotalTime" class="computed-value">—</div>
             </div>
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="attVisitFrom">Visit Time From</label>
-              <input type="time" id="attVisitFrom">
-            </div>
-            <div class="form-group">
-              <label for="attVisitTo">Visit Time To</label>
-              <input type="time" id="attVisitTo">
-            </div>
-          </div>
+
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Attendance</button>
           </div>
-          <div id="attMessage" class="message" style="display:none;"></div>
         </form>
 
-        <div class="section-header" style="margin-top:24px;">
+        <div class="section-header section-header-sub">
           <h3>Today's Attendance</h3>
         </div>
         <div class="table-container">
-          <table class="table">
+          <table class="table table-attendance">
             <thead>
               <tr>
                 <th>Name</th>
@@ -125,65 +116,164 @@
                 <th>Out Time</th>
                 <th>Visit From</th>
                 <th>Visit To</th>
+                <th>Break</th>
+                <th>Total</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="todayAttendanceBody">
-              <tr><td colspan="6" class="text-center">Select a date to view records</td></tr>
+              <tr><td colspan="8" class="text-center">Select a date to view records</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
+      <!-- View Records -->
       <section id="tab-records" class="tab-content" style="display:none;">
         <div class="section-header">
           <h2>Attendance Records</h2>
         </div>
 
-        <div class="filter-bar">
-          <div class="form-row">
+        <div class="filter-bar form-panel">
+          <div class="form-row filter-row">
             <div class="form-group">
-              <label for="filterDate">Date</label>
-              <input type="date" id="filterDate">
+              <label for="filterDateFrom">From Date</label>
+              <input type="date" id="filterDateFrom">
             </div>
             <div class="form-group">
-              <label for="filterWorker">Worker</label>
-              <select id="filterWorker">
-                <option value="">All Workers</option>
+              <label for="filterDateTo">To Date</label>
+              <input type="date" id="filterDateTo">
+              <small class="field-hint">Leave empty for single-day view</small>
+            </div>
+            <div class="form-group">
+              <label for="filterEmployee">Employee</label>
+              <select id="filterEmployee">
+                <option value="">All Employees</option>
               </select>
             </div>
-            <div class="form-group" style="align-self:flex-end;">
-              <button class="btn btn-primary" id="btnFilter">Filter</button>
+            <div class="form-group filter-actions">
+              <button class="btn btn-primary" id="btnFilter" type="button">Filter</button>
               <button class="btn btn-secondary" id="btnExport" type="button">Export CSV</button>
               <button class="btn btn-secondary" id="btnExportExcel" type="button">Export Excel</button>
-              <button class="btn btn-secondary" id="btnClearFilter">Clear</button>
+              <button class="btn btn-secondary" id="btnClearFilter" type="button">Clear</button>
             </div>
           </div>
         </div>
 
-        <div class="table-container">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Worker ID</th>
-                <th>Name</th>
-                <th>In Time</th>
-                <th>Out Time</th>
-                <th>Visit From</th>
-                <th>Visit To</th>
-              </tr>
-            </thead>
-            <tbody id="recordsTableBody">
-              <tr><td colspan="7" class="text-center">Use filters to view records</td></tr>
-            </tbody>
-          </table>
+        <div id="recordsContainer" class="records-container">
+          <p class="text-center records-empty">Use filters to view records</p>
+        </div>
+      </section>
+
+      <!-- Masters (Admin) -->
+      <section id="tab-masters" class="tab-content" style="display:none;">
+        <div class="section-header">
+          <h2>Masters</h2>
+        </div>
+
+        <div class="masters-tabs">
+          <button type="button" class="masters-tab active" data-master="departments">Departments</button>
+          <button type="button" class="masters-tab" data-master="employees">Employees</button>
+        </div>
+
+        <!-- Departments -->
+        <div id="master-departments" class="master-panel">
+          <div class="section-header section-header-sub">
+            <h3>Departments</h3>
+            <button class="btn btn-primary btn-sm" id="btnAddDepartment">+ Add Department</button>
+          </div>
+          <div id="addDepartmentForm" class="form-panel" style="display:none;">
+            <form id="departmentForm">
+              <input type="hidden" id="departmentEditId">
+              <div class="form-group">
+                <label for="departmentName">Department Name</label>
+                <input type="text" id="departmentName" required placeholder="e.g. Engineering">
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" id="btnCancelDepartment">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead><tr><th>Department</th><th>Actions</th></tr></thead>
+              <tbody id="departmentsTableBody">
+                <tr><td colspan="2" class="text-center">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Employees -->
+        <div id="master-employees" class="master-panel" style="display:none;">
+          <div class="section-header section-header-sub">
+            <h3>Employees</h3>
+            <button class="btn btn-primary btn-sm" id="btnAddEmployee">+ Add Employee</button>
+          </div>
+          <div id="addEmployeeForm" class="form-panel" style="display:none;">
+            <h4 id="employeeFormTitle">Add Employee</h4>
+            <form id="employeeForm">
+              <input type="hidden" id="employeeEditId">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="employeeName">Name</label>
+                  <input type="text" id="employeeName" required placeholder="Full name">
+                </div>
+                <div class="form-group">
+                  <label for="employeeMobile">Mobile</label>
+                  <input type="tel" id="employeeMobile" placeholder="Phone number">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="employeeEmail">Email</label>
+                  <input type="email" id="employeeEmail" placeholder="Email address">
+                </div>
+                <div class="form-group">
+                  <label for="employeeDepartment">Department</label>
+                  <select id="employeeDepartment">
+                    <option value="">Select Department</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="employeeDocument">Document (PDF or image)</label>
+                <input type="file" id="employeeDocument" accept=".pdf,image/*">
+                <small class="field-hint">Optional. PDF, JPG, PNG, GIF, or WebP only.</small>
+                <div id="currentDocument" class="current-document" style="display:none;"></div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" id="btnCancelEmployee">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Mobile</th>
+                  <th>Email</th>
+                  <th>Department</th>
+                  <th>Document</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="employeesTableBody">
+                <tr><td colspan="6" class="text-center">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
     </main>
   </div>
 
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="js/duration.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/dashboard.js"></script>
 </body>

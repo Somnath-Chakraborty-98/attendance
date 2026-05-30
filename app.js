@@ -5,6 +5,13 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const { validatePassword, passwordErrorMessage } = require('./js/password');
+const {
+  pgIntervalToMinutes,
+  durationInputToPgInterval
+} = require('./js/duration');
 require('dotenv').config();
 
 const pool = new Pool({
@@ -19,6 +26,23 @@ const allowedOrigin = process.env.SITE_URL || '*';
 app.use(cors({ origin: allowedOrigin, credentials: true }));
 app.use(express.json());
 
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter(req, file, cb) {
+        const allowed = [
+            'application/pdf',
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+        ];
+        if (allowed.includes(file.mimetype)) cb(null, true);
+        else cb(new Error('Only PDF and image files are allowed'));
+    }
+});
+
 const transporter = nodemailer.createTransport({
     host: process.env.ZOHO_SMTP_HOST,
     port: Number(process.env.ZOHO_SMTP_PORT) || 465,
@@ -28,6 +52,10 @@ const transporter = nodemailer.createTransport({
     greetingTimeout: 10000,
     socketTimeout: 10000
 });
+
+const ALLOWED_DOC_TYPES = new Set([
+    'application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'
+]);
 
 function signJwt(payload) {
     return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -46,13 +74,103 @@ function requireAuth(req, res, next) {
     }
 }
 
+async function requireAdmin(req, res, next) {
+    const client = await pool.connect();
+    try {
+        const q = await client.query('SELECT is_admin FROM public.users WHERE id=$1', [req.user.sub]);
+        if (!q.rowCount || !q.rows[0].is_admin) {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+        next();
+    } catch (err) {
+        console.error('requireAdmin error', err);
+        res.status(500).json({ error: 'Authorization check failed' });
+    } finally {
+        client.release();
+    }
+}
+
 function withTimeout(promise, ms, message) {
     let timer;
     const timeout = new Promise((resolve, reject) => {
         timer = setTimeout(() => reject(new Error(message)), ms);
     });
-
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function siteUrl() {
+    return (process.env.SITE_URL || 'http://localhost:5500').replace(/\/$/, '');
+}
+
+function timeToMinutes(t) {
+    if (!t) return 0;
+    const parts = String(t).split(':').map(Number);
+    return parts[0] * 60 + (parts[1] || 0) + (parts[2] || 0) / 60;
+}
+
+function minutesToTime(m) {
+    if (m == null || m <= 0) return null;
+    const h = Math.floor(m / 60);
+    const min = Math.round(m % 60);
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+function calcTotalTime(inTime, outTime, breakTime) {
+    if (!inTime || !outTime) return null;
+    let total = timeToMinutes(outTime) - timeToMinutes(inTime);
+    if (breakTime) total -= pgIntervalToMinutes(breakTime);
+    return total > 0 ? minutesToTime(total) : '00:00';
+}
+
+function mapAttendanceRow(row) {
+    return {
+        id: row.id,
+        date: row.date,
+        employee_id: row.employee_id,
+        in_time: row.in_time,
+        out_time: row.out_time,
+        break_time: row.break_time,
+        visit_time_from: row.visit_time_from,
+        visit_time_to: row.visit_time_to,
+        total_time: row.total_time,
+        leave: row.on_leave,
+        name: row.name,
+        created_at: row.created_at
+    };
+}
+
+async function uploadDocument(file) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'employee-documents';
+    if (!supabaseUrl || !serviceKey || !file) return null;
+
+    const ext = path.extname(file.originalname) || '';
+    const objectPath = `documents/${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
+
+    const res = await fetch(`${supabaseUrl}/storage/v1/object/${bucket}/${objectPath}`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': file.mimetype,
+            'x-upsert': 'true'
+        },
+        body: file.buffer
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Document upload failed');
+    }
+
+    return `${supabaseUrl}/storage/v1/object/public/${bucket}/${objectPath}`;
+}
+
+async function sendMail(options) {
+    await withTimeout(transporter.sendMail({
+        from: process.env.ZOHO_FROM_EMAIL,
+        ...options
+    }), 8000, 'Email timed out');
 }
 
 app.get('/api/health', (req, res) => {
@@ -63,17 +181,13 @@ app.get('/api/health', (req, res) => {
             JWT_SECRET: Boolean(process.env.JWT_SECRET),
             SITE_URL: Boolean(process.env.SITE_URL),
             ZOHO_SMTP_HOST: Boolean(process.env.ZOHO_SMTP_HOST),
-            ZOHO_SMTP_PORT: Boolean(process.env.ZOHO_SMTP_PORT),
-            ZOHO_SMTP_USER: Boolean(process.env.ZOHO_SMTP_USER),
-            ZOHO_SMTP_PASS: Boolean(process.env.ZOHO_SMTP_PASS),
-            ZOHO_FROM_EMAIL: Boolean(process.env.ZOHO_FROM_EMAIL)
+            SUPABASE_URL: Boolean(process.env.SUPABASE_URL)
         }
     });
 });
 
 app.get('/api/db-test', async (req, res) => {
     if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL is missing' });
-
     let client;
     try {
         client = await withTimeout(pool.connect(), 8000, 'Database connection timed out');
@@ -87,20 +201,6 @@ app.get('/api/db-test', async (req, res) => {
     }
 });
 
-app.get('/api/smtp-test', async (req, res) => {
-    if (!process.env.ZOHO_SMTP_HOST || !process.env.ZOHO_SMTP_USER || !process.env.ZOHO_SMTP_PASS || !process.env.ZOHO_FROM_EMAIL) {
-        return res.status(500).json({ error: 'Email settings are missing' });
-    }
-
-    try {
-        await withTimeout(transporter.verify(), 8000, 'SMTP connection timed out');
-        res.json({ ok: true });
-    } catch (err) {
-        console.error('smtp-test error', err);
-        res.status(500).json({ error: err.message || 'SMTP test failed' });
-    }
-});
-
 app.get('/api/schema-test', requireAuth, async (req, res) => {
     const client = await pool.connect();
     try {
@@ -108,7 +208,7 @@ app.get('/api/schema-test', requireAuth, async (req, res) => {
             `SELECT table_name, column_name, data_type
              FROM information_schema.columns
              WHERE table_schema = 'public'
-               AND table_name IN ('workers', 'attendance')
+               AND table_name IN ('employees', 'departments', 'attendance', 'users')
              ORDER BY table_name, ordinal_position`
         );
         res.json({ ok: true, columns: q.rows });
@@ -123,7 +223,10 @@ app.get('/api/schema-test', requireAuth, async (req, res) => {
 app.post('/api/signup', async (req, res) => {
     const { email, password, name } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password too short' });
+
+    const pwdErr = passwordErrorMessage(password);
+    if (pwdErr) return res.status(400).json({ error: pwdErr });
+
     if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL is missing' });
     if (!process.env.ZOHO_SMTP_HOST || !process.env.ZOHO_SMTP_USER || !process.env.ZOHO_SMTP_PASS || !process.env.ZOHO_FROM_EMAIL) {
         return res.status(500).json({ error: 'Email settings are missing' });
@@ -134,32 +237,26 @@ app.post('/api/signup', async (req, res) => {
         const exists = await client.query('SELECT id FROM public.users WHERE email=$1', [email]);
         if (exists.rowCount) return res.status(409).json({ error: 'Email already registered' });
 
-        const salt = await bcrypt.genSalt(10);
-        const hash = await bcrypt.hash(password, salt);
-
+        const hash = await bcrypt.hash(password, 10);
         const insert = await client.query(
-            'INSERT INTO public.users(email, password_hash, name, is_verified) VALUES($1,$2,$3,false) RETURNING id',
+            'INSERT INTO public.users(email, password_hash, name, is_verified, is_admin) VALUES($1,$2,$3,false,false) RETURNING id',
             [email, hash, name || null]
         );
         const userId = insert.rows[0].id;
 
         const token = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
         await client.query(
             'INSERT INTO public.email_verifications(user_id, token, expires_at) VALUES($1,$2,$3)',
             [userId, token, expiresAt]
         );
 
-        const siteUrl = process.env.SITE_URL || 'http://localhost:5500';
-        const verifyLink = `${siteUrl.replace(/\/$/, '')}/api/verify?token=${token}`;
-
-        await withTimeout(transporter.sendMail({
-            from: process.env.ZOHO_FROM_EMAIL,
+        const verifyLink = `${siteUrl()}/verify.html?token=${token}`;
+        await sendMail({
             to: email,
-            subject: 'Confirm your account',
+            subject: 'Confirm your StanzaHR account',
             html: `<p>Hi ${name || ''},</p><p>Please confirm your email by clicking the link below:</p><p><a href="${verifyLink}">Confirm email</a></p>`
-        }), 8000, 'Confirmation email timed out');
+        });
 
         res.json({ message: 'confirmation_sent' });
     } catch (err) {
@@ -172,21 +269,87 @@ app.post('/api/signup', async (req, res) => {
 
 app.get('/api/verify', async (req, res) => {
     const token = req.query.token;
-    if (!token) return res.status(400).send('Missing token');
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+
     const client = await pool.connect();
     try {
         const q = await client.query('SELECT user_id, expires_at FROM public.email_verifications WHERE token=$1', [token]);
-        if (!q.rowCount) return res.status(400).send('Invalid token');
+        if (!q.rowCount) return res.status(400).json({ error: 'Invalid or expired verification link' });
         const row = q.rows[0];
-        if (new Date(row.expires_at) < new Date()) return res.status(400).send('Token expired');
+        if (new Date(row.expires_at) < new Date()) {
+            return res.status(400).json({ error: 'Verification link has expired' });
+        }
 
         await client.query('UPDATE public.users SET is_verified = true WHERE id=$1', [row.user_id]);
         await client.query('DELETE FROM public.email_verifications WHERE token=$1', [token]);
-
-        res.send('Email verified - you can now sign in.');
+        res.json({ message: 'verified' });
     } catch (err) {
         console.error('verify error', err);
-        res.status(500).send('Server error');
+        res.status(500).json({ error: 'Server error' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const client = await pool.connect();
+    try {
+        const q = await client.query('SELECT id, name FROM public.users WHERE email=$1', [email]);
+        if (q.rowCount) {
+            const user = q.rows[0];
+            const token = crypto.randomBytes(32).toString('hex');
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+            await client.query('DELETE FROM public.password_resets WHERE user_id=$1', [user.id]);
+            await client.query(
+                'INSERT INTO public.password_resets(user_id, token, expires_at) VALUES($1,$2,$3)',
+                [user.id, token, expiresAt]
+            );
+
+            const resetLink = `${siteUrl()}/reset-password.html?token=${token}`;
+            await sendMail({
+                to: email,
+                subject: 'Reset your StanzaHR password',
+                html: `<p>Hi ${user.name || ''},</p><p>Click the link below to reset your password. This link expires in 1 hour.</p><p><a href="${resetLink}">Reset password</a></p>`
+            });
+        }
+        res.json({ message: 'If an account exists for that email, a reset link has been sent.' });
+    } catch (err) {
+        console.error('forgot-password error', err);
+        res.status(500).json({ error: 'Failed to process request' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/reset-password', async (req, res) => {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ error: 'Missing token or password' });
+
+    const pwdErr = passwordErrorMessage(password);
+    if (pwdErr) return res.status(400).json({ error: pwdErr });
+
+    const client = await pool.connect();
+    try {
+        const q = await client.query(
+            'SELECT user_id, expires_at FROM public.password_resets WHERE token=$1',
+            [token]
+        );
+        if (!q.rowCount) return res.status(400).json({ error: 'Invalid or expired reset link' });
+        const row = q.rows[0];
+        if (new Date(row.expires_at) < new Date()) {
+            return res.status(400).json({ error: 'Reset link has expired' });
+        }
+
+        const hash = await bcrypt.hash(password, 10);
+        await client.query('UPDATE public.users SET password_hash=$1 WHERE id=$2', [hash, row.user_id]);
+        await client.query('DELETE FROM public.password_resets WHERE token=$1', [token]);
+        res.json({ message: 'password_reset' });
+    } catch (err) {
+        console.error('reset-password error', err);
+        res.status(500).json({ error: 'Failed to reset password' });
     } finally {
         client.release();
     }
@@ -197,16 +360,20 @@ app.post('/api/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
     if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL is missing' });
     if (!process.env.JWT_SECRET) return res.status(500).json({ error: 'JWT_SECRET is missing' });
+
     const client = await pool.connect();
     try {
-        const q = await client.query('SELECT id, password_hash, is_verified, name FROM public.users WHERE email=$1', [email]);
+        const q = await client.query(
+            'SELECT id, password_hash, is_verified, name, is_admin FROM public.users WHERE email=$1',
+            [email]
+        );
         if (!q.rowCount) return res.status(401).json({ error: 'Invalid credentials' });
         const user = q.rows[0];
         const ok = await bcrypt.compare(password, user.password_hash);
         if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
         if (!user.is_verified) return res.status(403).json({ error: 'Email not verified' });
 
-        const token = signJwt({ sub: user.id, name: user.name, email });
+        const token = signJwt({ sub: user.id, name: user.name, email, is_admin: user.is_admin });
         res.json({ token });
     } catch (err) {
         console.error('login error', err);
@@ -220,12 +387,15 @@ app.get('/api/me', async (req, res) => {
     const auth = req.headers.authorization || '';
     const m = auth.match(/^Bearer\s+(.*)$/i);
     if (!m) return res.status(401).json({ error: 'Missing token' });
-    const token = m[1];
+
     try {
-        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        const payload = jwt.verify(m[1], process.env.JWT_SECRET);
         const client = await pool.connect();
         try {
-            const q = await client.query('SELECT id, email, name, is_verified, created_at FROM public.users WHERE id=$1', [payload.sub]);
+            const q = await client.query(
+                'SELECT id, email, name, is_verified, is_admin, created_at FROM public.users WHERE id=$1',
+                [payload.sub]
+            );
             if (!q.rowCount) return res.status(404).json({ error: 'Not found' });
             res.json({ user: q.rows[0] });
         } finally {
@@ -237,95 +407,251 @@ app.get('/api/me', async (req, res) => {
     }
 });
 
-app.get('/api/workers', requireAuth, async (req, res) => {
+app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     const client = await pool.connect();
     try {
-        const q = await client.query('SELECT id, workerid AS worker_id, name FROM public.workers ORDER BY workerid ASC');
-        res.json({ workers: q.rows });
+        const q = await client.query(
+            'SELECT id, email, name, is_verified, is_admin, created_at FROM public.users ORDER BY email ASC'
+        );
+        res.json({ users: q.rows });
     } catch (err) {
-        console.error('workers list error', err);
-        res.status(500).json({ error: err.message || 'Failed to load workers' });
+        console.error('users list error', err);
+        res.status(500).json({ error: 'Failed to load users' });
     } finally {
         client.release();
     }
 });
 
-app.post('/api/workers', requireAuth, async (req, res) => {
-    const { worker_id, name } = req.body || {};
-    if (!worker_id || !name) return res.status(400).json({ error: 'Missing worker ID or name' });
+app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+    const { is_admin } = req.body || {};
+    if (typeof is_admin !== 'boolean') return res.status(400).json({ error: 'is_admin must be boolean' });
+    if (String(req.params.id) === String(req.user.sub) && !is_admin) {
+        return res.status(400).json({ error: 'You cannot remove your own admin access' });
+    }
 
     const client = await pool.connect();
     try {
         const q = await client.query(
-            'INSERT INTO public.workers(workerid, name) VALUES($1,$2) RETURNING id, workerid AS worker_id, name',
-            [worker_id, name]
+            'UPDATE public.users SET is_admin=$1 WHERE id=$2 RETURNING id, email, name, is_verified, is_admin, created_at',
+            [is_admin, req.params.id]
         );
-        res.status(201).json({ worker: q.rows[0] });
+        if (!q.rowCount) return res.status(404).json({ error: 'User not found' });
+        res.json({ user: q.rows[0] });
     } catch (err) {
-        console.error('worker create error', err);
-        if (err.code === '23505') return res.status(409).json({ error: 'Worker ID already exists' });
-        res.status(500).json({ error: err.message || 'Failed to add worker' });
+        console.error('user update error', err);
+        res.status(500).json({ error: 'Failed to update user' });
     } finally {
         client.release();
     }
 });
 
-app.put('/api/workers/:id', requireAuth, async (req, res) => {
-    const { worker_id, name } = req.body || {};
-    if (!worker_id || !name) return res.status(400).json({ error: 'Missing worker ID or name' });
+app.get('/api/departments', requireAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const q = await client.query('SELECT id, dep_name FROM public.departments ORDER BY dep_name ASC');
+        res.json({ departments: q.rows });
+    } catch (err) {
+        console.error('departments list error', err);
+        res.status(500).json({ error: 'Failed to load departments' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/departments', requireAuth, requireAdmin, async (req, res) => {
+    const { dep_name } = req.body || {};
+    if (!dep_name || !dep_name.trim()) return res.status(400).json({ error: 'Department name is required' });
 
     const client = await pool.connect();
     try {
         const q = await client.query(
-            'UPDATE public.workers SET workerid=$1, name=$2 WHERE id=$3 RETURNING id, workerid AS worker_id, name',
-            [worker_id, name, req.params.id]
+            'INSERT INTO public.departments(dep_name) VALUES($1) RETURNING id, dep_name',
+            [dep_name.trim()]
         );
-        if (!q.rowCount) return res.status(404).json({ error: 'Worker not found' });
-        res.json({ worker: q.rows[0] });
+        res.status(201).json({ department: q.rows[0] });
     } catch (err) {
-        console.error('worker update error', err);
-        if (err.code === '23505') return res.status(409).json({ error: 'Worker ID already exists' });
-        res.status(500).json({ error: err.message || 'Failed to update worker' });
+        console.error('department create error', err);
+        if (err.code === '23505') return res.status(409).json({ error: 'Department already exists' });
+        res.status(500).json({ error: 'Failed to add department' });
     } finally {
         client.release();
     }
 });
 
-app.delete('/api/workers/:id', requireAuth, async (req, res) => {
+app.put('/api/departments/:id', requireAuth, requireAdmin, async (req, res) => {
+    const { dep_name } = req.body || {};
+    if (!dep_name || !dep_name.trim()) return res.status(400).json({ error: 'Department name is required' });
+
+    const client = await pool.connect();
+    try {
+        const q = await client.query(
+            'UPDATE public.departments SET dep_name=$1 WHERE id=$2 RETURNING id, dep_name',
+            [dep_name.trim(), req.params.id]
+        );
+        if (!q.rowCount) return res.status(404).json({ error: 'Department not found' });
+        res.json({ department: q.rows[0] });
+    } catch (err) {
+        console.error('department update error', err);
+        if (err.code === '23505') return res.status(409).json({ error: 'Department already exists' });
+        res.status(500).json({ error: 'Failed to update department' });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/departments/:id', requireAuth, requireAdmin, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const q = await client.query('DELETE FROM public.departments WHERE id=$1 RETURNING id', [req.params.id]);
+        if (!q.rowCount) return res.status(404).json({ error: 'Department not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('department delete error', err);
+        res.status(500).json({ error: 'Failed to delete department' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/employees', requireAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const q = await client.query(
+            `SELECT e.id, e.name, e.mobile, e.email_id, e.department_id, e.documents, e.created_at,
+                    d.dep_name AS department_name
+             FROM public.employees e
+             LEFT JOIN public.departments d ON d.id = e.department_id
+             ORDER BY e.name ASC`
+        );
+        res.json({ employees: q.rows });
+    } catch (err) {
+        console.error('employees list error', err);
+        res.status(500).json({ error: 'Failed to load employees' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/employees', requireAuth, requireAdmin, upload.single('document'), async (req, res) => {
+    const { name, mobile, email_id, department_id } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Employee name is required' });
+
+    const client = await pool.connect();
+    try {
+        let documents = null;
+        if (req.file) {
+            if (!ALLOWED_DOC_TYPES.has(req.file.mimetype)) {
+                return res.status(400).json({ error: 'Only PDF and image files are allowed' });
+            }
+            documents = await uploadDocument(req.file);
+        }
+
+        const q = await client.query(
+            `INSERT INTO public.employees(name, mobile, email_id, department_id, documents)
+             VALUES($1,$2,$3,$4,$5)
+             RETURNING id, name, mobile, email_id, department_id, documents, created_at`,
+            [
+                name.trim(),
+                mobile || null,
+                email_id || null,
+                department_id ? Number(department_id) : null,
+                documents
+            ]
+        );
+        res.status(201).json({ employee: q.rows[0] });
+    } catch (err) {
+        console.error('employee create error', err);
+        res.status(500).json({ error: err.message || 'Failed to add employee' });
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/api/employees/:id', requireAuth, requireAdmin, upload.single('document'), async (req, res) => {
+    const { name, mobile, email_id, department_id, remove_document } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Employee name is required' });
+
+    const client = await pool.connect();
+    try {
+        const existing = await client.query('SELECT documents FROM public.employees WHERE id=$1', [req.params.id]);
+        if (!existing.rowCount) return res.status(404).json({ error: 'Employee not found' });
+
+        let documents = existing.rows[0].documents;
+        if (remove_document === 'true') documents = null;
+        if (req.file) {
+            if (!ALLOWED_DOC_TYPES.has(req.file.mimetype)) {
+                return res.status(400).json({ error: 'Only PDF and image files are allowed' });
+            }
+            documents = await uploadDocument(req.file);
+        }
+
+        const q = await client.query(
+            `UPDATE public.employees
+             SET name=$1, mobile=$2, email_id=$3, department_id=$4, documents=$5
+             WHERE id=$6
+             RETURNING id, name, mobile, email_id, department_id, documents, created_at`,
+            [
+                name.trim(),
+                mobile || null,
+                email_id || null,
+                department_id ? Number(department_id) : null,
+                documents,
+                req.params.id
+            ]
+        );
+        res.json({ employee: q.rows[0] });
+    } catch (err) {
+        console.error('employee update error', err);
+        res.status(500).json({ error: err.message || 'Failed to update employee' });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/employees/:id', requireAuth, requireAdmin, async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const worker = await client.query('SELECT workerid AS worker_id FROM public.workers WHERE id=$1', [req.params.id]);
-        if (!worker.rowCount) {
+        const emp = await client.query('SELECT id FROM public.employees WHERE id=$1', [req.params.id]);
+        if (!emp.rowCount) {
             await client.query('ROLLBACK');
-            return res.status(404).json({ error: 'Worker not found' });
+            return res.status(404).json({ error: 'Employee not found' });
         }
-
-        await client.query('DELETE FROM public.attendance WHERE workerid=$1', [worker.rows[0].worker_id]);
-        await client.query('DELETE FROM public.workers WHERE id=$1', [req.params.id]);
+        await client.query('DELETE FROM public.employees WHERE id=$1', [req.params.id]);
         await client.query('COMMIT');
         res.json({ ok: true });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('worker delete error', err);
-        res.status(500).json({ error: err.message || 'Failed to delete worker' });
+        console.error('employee delete error', err);
+        res.status(500).json({ error: 'Failed to delete employee' });
     } finally {
         client.release();
     }
 });
 
 app.get('/api/attendance', requireAuth, async (req, res) => {
-    const { date, worker_id } = req.query;
+    const { date, date_from, date_to, employee_id } = req.query;
     const params = [];
     const where = [];
 
     if (date) {
         params.push(date);
         where.push(`a.date = $${params.length}`);
+    } else if (date_from) {
+        if (date_to) {
+            params.push(date_from);
+            where.push(`a.date >= $${params.length}`);
+            params.push(date_to);
+            where.push(`a.date <= $${params.length}`);
+        } else {
+            params.push(date_from);
+            where.push(`a.date = $${params.length}`);
+        }
     }
-    if (worker_id) {
-        params.push(worker_id);
-        where.push(`a.workerid = $${params.length}`);
+
+    if (employee_id) {
+        params.push(Number(employee_id));
+        where.push(`a.employee_id = $${params.length}`);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -333,22 +659,17 @@ app.get('/api/attendance', requireAuth, async (req, res) => {
     try {
         const q = await client.query(
             `SELECT
-                a.id,
-                a.date,
-                a.workerid AS worker_id,
-                a.intime AS in_time,
-                a.outtime AS out_time,
-                a.visittimefrom AS visit_time_from,
-                a.visittimeto AS visit_time_to,
-                w.name
+                a.id, a.date, a.employee_id, a.in_time, a.out_time, a.break_time,
+                a.visit_time_from, a.visit_time_to, a.total_time, a.on_leave, a.created_at,
+                e.name
              FROM public.attendance a
-             LEFT JOIN public.workers w ON w.workerid = a.workerid
+             LEFT JOIN public.employees e ON e.id = a.employee_id
              ${whereSql}
-             ORDER BY a.date DESC, a.workerid ASC
-             LIMIT 200`,
+             ORDER BY a.date DESC, e.name ASC
+             LIMIT 500`,
             params
         );
-        res.json({ attendance: q.rows });
+        res.json({ attendance: q.rows.map(mapAttendanceRow) });
     } catch (err) {
         console.error('attendance list error', err);
         res.status(500).json({ error: 'Failed to load attendance' });
@@ -358,49 +679,60 @@ app.get('/api/attendance', requireAuth, async (req, res) => {
 });
 
 app.post('/api/attendance', requireAuth, async (req, res) => {
-    const { date, worker_id, in_time, out_time, visit_time_from, visit_time_to } = req.body || {};
-    if (!date || !worker_id) return res.status(400).json({ error: 'Missing date or worker' });
+    const {
+        date,
+        employee_id,
+        in_time,
+        out_time,
+        break_time,
+        visit_time_from,
+        visit_time_to,
+        leave: onLeave
+    } = req.body || {};
+
+    if (!date || !employee_id) return res.status(400).json({ error: 'Missing date or employee' });
+
+    const isLeave = Boolean(onLeave);
+    const inTime = isLeave ? null : (in_time || null);
+    const outTime = isLeave ? null : (out_time || null);
+    const breakTime = isLeave ? null : durationInputToPgInterval(break_time);
+    const visitFrom = isLeave ? null : (visit_time_from || null);
+    const visitTo = isLeave ? null : (visit_time_to || null);
+    const totalTime = isLeave ? null : calcTotalTime(inTime, outTime, breakTime);
 
     const client = await pool.connect();
     try {
         const existing = await client.query(
-            'SELECT id FROM public.attendance WHERE date=$1 AND workerid=$2',
-            [date, worker_id]
+            'SELECT id FROM public.attendance WHERE date=$1 AND employee_id=$2',
+            [date, employee_id]
         );
 
         let q;
         if (existing.rowCount) {
             q = await client.query(
                 `UPDATE public.attendance
-                 SET intime=$1, outtime=$2, visittimefrom=$3, visittimeto=$4
-                 WHERE id=$5
-                 RETURNING
-                    id,
-                    date,
-                    workerid AS worker_id,
-                    intime AS in_time,
-                    outtime AS out_time,
-                    visittimefrom AS visit_time_from,
-                    visittimeto AS visit_time_to`,
-                [in_time || null, out_time || null, visit_time_from || null, visit_time_to || null, existing.rows[0].id]
+                 SET in_time=$1, out_time=$2, break_time=$3, visit_time_from=$4, visit_time_to=$5,
+                     total_time=$6, on_leave=$7
+                 WHERE id=$8
+                 RETURNING id, date, employee_id, in_time, out_time, break_time,
+                           visit_time_from, visit_time_to, total_time, on_leave, created_at`,
+                [inTime, outTime, breakTime, visitFrom, visitTo, totalTime, isLeave, existing.rows[0].id]
             );
         } else {
             q = await client.query(
-                `INSERT INTO public.attendance(date, workerid, intime, outtime, visittimefrom, visittimeto)
-                 VALUES($1,$2,$3,$4,$5,$6)
-                 RETURNING
-                    id,
-                    date,
-                    workerid AS worker_id,
-                    intime AS in_time,
-                    outtime AS out_time,
-                    visittimefrom AS visit_time_from,
-                    visittimeto AS visit_time_to`,
-                [date, worker_id, in_time || null, out_time || null, visit_time_from || null, visit_time_to || null]
+                `INSERT INTO public.attendance(date, employee_id, in_time, out_time, break_time,
+                    visit_time_from, visit_time_to, total_time, on_leave)
+                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                 RETURNING id, date, employee_id, in_time, out_time, break_time,
+                           visit_time_from, visit_time_to, total_time, on_leave, created_at`,
+                [date, employee_id, inTime, outTime, breakTime, visitFrom, visitTo, totalTime, isLeave]
             );
         }
 
-        res.json({ attendance: q.rows[0] });
+        const row = q.rows[0];
+        const emp = await client.query('SELECT name FROM public.employees WHERE id=$1', [employee_id]);
+        row.name = emp.rows[0]?.name || null;
+        res.json({ attendance: mapAttendanceRow(row) });
     } catch (err) {
         console.error('attendance save error', err);
         res.status(500).json({ error: 'Failed to save attendance' });

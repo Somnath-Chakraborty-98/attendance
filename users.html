@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StanzaHR - Users</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dashboard-page">
+  <nav class="navbar">
+    <div class="nav-brand">StanzaHR</div>
+    <div class="nav-user">
+      <span id="userName"></span>
+      <div class="settings-menu">
+        <button class="btn btn-sm btn-outline settings-btn" id="settingsBtn" type="button" aria-label="Settings">⚙</button>
+        <div class="settings-dropdown" id="settingsDropdown">
+          <a href="users.html" class="settings-item">Users</a>
+          <button type="button" class="settings-item" onclick="signOut()">Logout</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <nav>
+        <a href="dashboard.html" class="nav-item">Mark Attendance</a>
+        <a href="dashboard.html#records" class="nav-item">View Records</a>
+        <a href="dashboard.html#masters" class="nav-item">Masters</a>
+        <a href="users.html" class="nav-item active">Users</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="section-header">
+        <h2>User Management</h2>
+        <a href="dashboard.html" class="btn btn-secondary">Back to Dashboard</a>
+      </div>
+      <p class="section-desc">Grant or revoke admin access for registered users.</p>
+
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Verified</th>
+              <th>Admin</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr><td colspan="5" class="text-center">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="js/auth.js"></script>
+  <script src="js/users.js"></script>
+</body>
+</html>

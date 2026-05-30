@@ -455,6 +455,280 @@ body {
   gap: 6px;
 }
 
+.nav-user .btn-outline {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-user .btn-outline:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.settings-menu {
+  position: relative;
+}
+
+.settings-btn {
+  padding: 4px 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.settings-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 140px;
+  overflow: hidden;
+  z-index: 200;
+}
+
+.settings-dropdown.open {
+  display: block;
+}
+
+.settings-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 14px;
+  color: #1a1a2e;
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.settings-item:hover {
+  background: #f1f5f9;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.auth-forgot {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.auth-status-card {
+  text-align: center;
+}
+
+.status-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin: 0 auto 16px;
+}
+
+.status-success {
+  background: #e6f7ee;
+  color: #0d7d40;
+}
+
+.status-error {
+  background: #fde8e8;
+  color: #c41e3a;
+}
+
+.status-loading {
+  background: #eef2ff;
+  color: #0f3460;
+}
+
+.status-message {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.section-desc {
+  font-size: 14px;
+  color: #64748b;
+  margin: -12px 0 20px;
+}
+
+.section-header-sub {
+  margin-top: 28px;
+  margin-bottom: 12px;
+}
+
+.checkbox-group {
+  margin-bottom: 12px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.computed-value {
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f3460;
+}
+
+.collapsible-section {
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.collapsible-toggle {
+  width: 100%;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.collapsible-body {
+  padding: 16px 16px 4px;
+}
+
+.collapsible-section.collapsed .toggle-icon {
+  transform: rotate(-90deg);
+}
+
+.leave-row {
+  background: #fffbeb;
+}
+
+.leave-label {
+  color: #b45309;
+  font-weight: 600;
+  font-style: italic;
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.masters-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.masters-tab {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  color: #64748b;
+}
+
+.masters-tab.active {
+  background: #0f3460;
+  color: #fff;
+  border-color: #0f3460;
+}
+
+.current-document {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.current-document a {
+  color: #0f3460;
+}
+
+.filter-row {
+  align-items: flex-end;
+}
+
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 2px;
+}
+
+.filter-actions .btn {
+  margin-left: 0;
+}
+
+.records-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.records-date-group {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.records-date-heading {
+  padding: 14px 16px;
+  background: #f8fafc;
+  font-size: 15px;
+  color: #0f3460;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.records-empty {
+  padding: 40px 16px;
+  color: #94a3b8;
+}
+
+.table-attendance th,
+.table-attendance td {
+  white-space: nowrap;
+}
+
+.table-attendance td:nth-child(1) {
+  white-space: normal;
+  min-width: 120px;
+}
+
+.form-group input[type="file"] {
+  padding: 8px;
+  font-size: 13px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .dashboard {
