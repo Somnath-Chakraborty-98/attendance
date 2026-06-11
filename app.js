@@ -1957,8 +1957,7 @@ app.get('/api/reports/employees', requireAuth, async (req, res) => {
 
 if (!process.env.VERCEL) {
     const root = path.join(__dirname);
-    app.get('/', (req, res) => res.sendFile(path.join(root, 'org.html')));
-    app.get('/login', (req, res) => res.sendFile(path.join(root, 'index.html')));
+    app.get('/login', (req, res) => res.sendFile(path.join(root, 'login.html')));
     app.get('/dashboard', (req, res) => res.sendFile(path.join(root, 'dashboard.html')));
     app.get('/users', (req, res) => res.sendFile(path.join(root, 'users.html')));
     app.get('/create-organization', (req, res) => res.sendFile(path.join(root, 'create-organization.html')));

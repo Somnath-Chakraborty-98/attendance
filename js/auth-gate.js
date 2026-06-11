@@ -1,6 +1,5 @@
 (function () {
-  var ORG_KEY = 'stanzahr_org_key';
-  var ORG_READY = 'stanzahr_org_ready';
+  var LOGIN_ALLOWED = 'stanzahr_login_allowed';
   var page = document.documentElement.getAttribute('data-auth-page');
   if (!page) return;
 
@@ -13,6 +12,7 @@
   }
 
   if (page === 'org') {
+    sessionStorage.removeItem(LOGIN_ALLOWED);
     if (localStorage.getItem('token')) {
       document.documentElement.classList.add('auth-gate');
     } else {
@@ -22,7 +22,7 @@
   }
 
   if (page === 'login') {
-    if (!sessionStorage.getItem(ORG_KEY) || !sessionStorage.getItem(ORG_READY)) {
+    if (sessionStorage.getItem(LOGIN_ALLOWED) !== '1') {
       redirect('/');
       return;
     }

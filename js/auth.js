@@ -85,7 +85,7 @@ function redirectTo(path) {
 
 function isLoginPath() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
-  return path === '/login' || path.endsWith('/index.html');
+  return path === '/login' || path.endsWith('/login.html');
 }
 
 async function readResponse(res) {
@@ -132,8 +132,16 @@ async function checkAuth() {
   return user;
 }
 
+function handleChangeOrg(e) {
+  if (e) e.preventDefault();
+  if (typeof clearOrg === 'function') clearOrg();
+  localStorage.removeItem('token');
+  if (typeof clearLoginAllowed === 'function') clearLoginAllowed();
+  redirectTo(ROUTES.org);
+}
+
 async function initLoginPage() {
-  if (!isOrgReady()) {
+  if (!isLoginAllowed()) {
     redirectTo(ROUTES.org);
     return false;
   }
@@ -214,11 +222,15 @@ function bindLoginForm(loginForm) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const changeOrg = document.getElementById('changeOrg');
+  if (changeOrg) {
+    changeOrg.addEventListener('click', handleChangeOrg);
+  }
+
   initPasswordToggles();
 
   const loginForm = document.getElementById('loginForm');
   const orgForm = document.getElementById('orgForm');
-  const changeOrg = document.getElementById('changeOrg');
 
   if (loginForm) {
     const ready = await initLoginPage();
@@ -228,19 +240,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ready = await initOrgPage();
     if (!ready) return;
   }
-
-  if (changeOrg) {
-    changeOrg.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (typeof clearOrg === 'function') clearOrg();
-      localStorage.removeItem('token');
-      redirectTo(ROUTES.org);
-    });
-  }
 });
 
 async function signOut() {
   localStorage.removeItem('token');
-  sessionStorage.removeItem('stanzahr_org_ready');
+  if (typeof clearLoginAllowed === 'function') clearLoginAllowed();
   redirectTo(ROUTES.org);
 }
