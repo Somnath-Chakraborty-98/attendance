@@ -79,10 +79,6 @@ function initPasswordToggles() {
   });
 }
 
-function revealAuthPage() {
-  document.documentElement.classList.remove('auth-pending');
-}
-
 function redirectTo(path) {
   window.location.replace(path);
 }
@@ -90,13 +86,6 @@ function redirectTo(path) {
 function isLoginPath() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   return path === '/login' || path.endsWith('/index.html');
-}
-
-function runEarlyLoginGuard() {
-  if (!isLoginPath()) return;
-  if (typeof getOrgKey === 'function' && !getOrgKey()) {
-    redirectTo(ROUTES.org);
-  }
 }
 
 async function readResponse(res) {
@@ -114,7 +103,10 @@ async function verifyToken() {
   if (!token) return null;
 
   try {
-    const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch('/api/me', {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000)
+    });
     if (!res.ok) {
       localStorage.removeItem('token');
       return null;
@@ -137,7 +129,6 @@ async function checkAuth() {
     redirectTo(ROUTES.org);
     return null;
   }
-  revealAuthPage();
   return user;
 }
 
@@ -147,34 +138,32 @@ async function initLoginPage() {
     return false;
   }
 
-  const user = await verifyToken();
-  if (user) {
-    redirectTo(ROUTES.dashboard);
-    return false;
-  }
-
   const orgContext = document.getElementById('orgContext');
   if (orgContext) {
     const name = getOrgName();
     orgContext.textContent = name ? `Sign in to ${name}` : 'Log in to manage workforce attendance';
   }
 
-  revealAuthPage();
-  return true;
-}
-
-async function initOrgPage() {
   const user = await verifyToken();
   if (user) {
     redirectTo(ROUTES.dashboard);
     return false;
   }
 
+  return true;
+}
+
+async function initOrgPage() {
   const orgKeyInput = document.getElementById('orgKey');
   const savedKey = getOrgKey();
   if (orgKeyInput && savedKey) orgKeyInput.value = savedKey;
 
-  revealAuthPage();
+  const user = await verifyToken();
+  if (user) {
+    redirectTo(ROUTES.dashboard);
+    return false;
+  }
+
   return true;
 }
 
@@ -236,8 +225,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else if (orgForm) {
     const ready = await initOrgPage();
     if (!ready) return;
-  } else {
-    revealAuthPage();
   }
 
   if (changeOrg) {

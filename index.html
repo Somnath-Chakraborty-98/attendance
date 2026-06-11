@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="auth-pending">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +9,8 @@
   <script src="js/org.js"></script>
   <script>
     (function () {
+      var path = window.location.pathname.replace(/\/$/, '') || '/';
+      if (path !== '/login' && !path.endsWith('/index.html')) return;
       if (!sessionStorage.getItem('stanzahr_org_key')) {
         window.location.replace('/');
       }

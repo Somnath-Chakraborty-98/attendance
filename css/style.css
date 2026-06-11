@@ -4,10 +4,6 @@
   box-sizing: border-box;
 }
 
-html.auth-pending body {
-  visibility: hidden;
-}
-
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: #f0f2f5;
