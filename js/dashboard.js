@@ -9,6 +9,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('userName').textContent = currentUser.name || currentUser.email;
 
+  const navOrg = document.getElementById('navOrgName');
+  if (navOrg) {
+    navOrg.textContent = currentUser.org_name ? `· ${currentUser.org_name}` : '';
+  }
+  if (currentUser.org_key && typeof setOrg === 'function') {
+    setOrg(currentUser.org_key, currentUser.org_name);
+  }
+
   if (currentUser.is_admin) {
     document.querySelectorAll('.admin-only').forEach(el => { el.style.display = ''; });
   }
@@ -18,8 +26,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   initAttendanceForm();
   initRecordsFilter();
   initMasters();
+  if (typeof initDashboardFeatures === 'function') initDashboardFeatures();
   setDefaultAttendanceDate();
-  activateTab('attendance');
+  activateTab('dashboard');
   if (window.history.replaceState) {
     history.replaceState(null, '', ROUTES.dashboard);
   }
@@ -49,9 +58,15 @@ function activateTab(tab) {
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.style.display = 'block';
   if (tab === 'attendance') showTodayAttendance();
-  if (tab === 'masters' && currentUser.is_admin) {
-    loadDepartments();
-    loadEmployeesTable();
+  if (tab === 'dashboard' && typeof loadDashboardStats === 'function') loadDashboardStats();
+  if (tab === 'employees' && typeof loadEmployeeDirectory === 'function') loadEmployeeDirectory();
+  if (tab === 'organization' && currentUser.is_admin) loadDepartments();
+  if (tab === 'leave' && typeof loadLeaveRecords === 'function') loadLeaveRecords();
+  if (tab === 'late' && typeof initLateTab === 'function') initLateTab();
+  if (tab === 'organization' && typeof loadHolidays === 'function') {
+    const activeOrgTab = document.querySelector('[data-org-tab].active');
+    if (activeOrgTab?.dataset.orgTab === 'holidays') loadHolidays();
+    if (activeOrgTab?.dataset.orgTab === 'settings' && typeof loadOrgSettings === 'function') loadOrgSettings();
   }
 }
 
@@ -59,7 +74,7 @@ function initTabs() {
   document.querySelectorAll('.sidebar .nav-item[data-tab]').forEach(item => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
-      if (item.dataset.tab === 'masters' && !currentUser.is_admin) return;
+      if (item.dataset.tab === 'organization' && !currentUser.is_admin) return;
       activateTab(item.dataset.tab);
       if (window.history.replaceState) {
         history.replaceState(null, '', ROUTES.dashboard);
@@ -96,10 +111,12 @@ async function loadEmployees() {
     const { employees } = await apiRequest('/api/employees');
     employeesCache = employees || [];
     populateEmployeeDropdowns(employeesCache);
+    if (typeof populateFeatureDropdowns === 'function') populateFeatureDropdowns();
   } catch (err) {
     console.error(err);
     employeesCache = [];
     populateEmployeeDropdowns([]);
+    if (typeof populateFeatureDropdowns === 'function') populateFeatureDropdowns();
   }
 }
 
@@ -117,39 +134,7 @@ function populateEmployeeDropdowns(employees) {
 }
 
 async function loadEmployeesTable() {
-  const tbody = document.getElementById('employeesTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="6" class="text-center">Loading...</td></tr>';
-
-  try {
-    const { employees } = await apiRequest('/api/employees');
-    employeesCache = employees || [];
-
-    if (!employees.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center">No employees added yet</td></tr>';
-      populateDepartmentDropdown([]);
-      return;
-    }
-
-    tbody.innerHTML = employees.map(e => `
-      <tr>
-        <td>${escapeHtml(e.name)}</td>
-        <td>${escapeHtml(e.mobile || '-')}</td>
-        <td>${escapeHtml(e.email_id || '-')}</td>
-        <td>${escapeHtml(e.department_name || '-')}</td>
-        <td>${e.documents ? `<a href="${escapeHtml(e.documents)}" target="_blank" rel="noopener">View</a>` : '-'}</td>
-        <td class="actions-cell">
-          <button class="btn btn-sm btn-primary" onclick="editEmployeeById('${escapeJs(String(e.id))}')">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteEmployee('${escapeJs(String(e.id))}', '${escapeJs(e.name)}')">Delete</button>
-        </td>
-      </tr>
-    `).join('');
-
-    populateEmployeeDropdowns(employees);
-    await loadDepartmentsForForm();
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center">Error: ${escapeHtml(err.message)}</td></tr>`;
-  }
+  if (typeof loadEmployeeDirectory === 'function') return loadEmployeeDirectory();
 }
 
 function editEmployeeById(id) {
@@ -163,6 +148,11 @@ function editEmployee(emp) {
   document.getElementById('employeeMobile').value = emp.mobile || '';
   document.getElementById('employeeEmail').value = emp.email_id || '';
   document.getElementById('employeeDepartment').value = emp.department_id || '';
+  document.getElementById('employeeJoining').value = emp.joining_date ? String(emp.joining_date).slice(0, 10) : '';
+  document.getElementById('employeeBirthday').value = emp.birthday ? String(emp.birthday).slice(0, 10) : '';
+  document.getElementById('employeeWorkStart').value = emp.work_start_time ? String(emp.work_start_time).slice(0, 5) : '';
+  document.getElementById('employeeAnnualLeave').value = emp.annual_leave_days ?? '';
+  document.getElementById('employeeTrackVisit').checked = Boolean(emp.track_visit_time);
   document.getElementById('employeeDocument').value = '';
   document.getElementById('employeeFormTitle').textContent = 'Edit Employee';
 
@@ -176,7 +166,10 @@ function editEmployee(emp) {
     docEl.innerHTML = '';
   }
 
-  document.getElementById('addEmployeeForm').style.display = 'block';
+  loadDepartmentsForForm().then(() => {
+    document.getElementById('addEmployeeForm').style.display = 'block';
+    document.getElementById('addEmployeeForm').scrollIntoView({ behavior: 'smooth' });
+  });
 }
 
 async function deleteEmployee(id, name) {
@@ -185,21 +178,38 @@ async function deleteEmployee(id, name) {
     await apiRequest(`/api/employees/${encodeURIComponent(id)}`, { method: 'DELETE' });
     showToast('Employee deleted.', 'success');
     await loadEmployees();
-    await loadEmployeesTable();
+    if (typeof loadEmployeeDirectory === 'function') await loadEmployeeDirectory();
+    if (typeof loadPlanUsageBadge === 'function') loadPlanUsageBadge();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
-function initEmployeeForm() {
-  document.getElementById('btnAddEmployee').addEventListener('click', async () => {
-    document.getElementById('employeeForm').reset();
-    document.getElementById('employeeEditId').value = '';
-    document.getElementById('employeeFormTitle').textContent = 'Add Employee';
-    document.getElementById('currentDocument').style.display = 'none';
-    await loadDepartmentsForForm();
+async function openEmployeeForm() {
+  if (currentUser?.is_admin) {
+    try {
+      const { plan } = await apiRequest('/api/organization/plan');
+      if (plan.max_employees != null && plan.employee_count >= plan.max_employees) {
+        showToast(`Employee limit reached (${plan.max_employees} on ${plan.plan_name} plan).`, 'error');
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+  document.getElementById('employeeForm').reset();
+  document.getElementById('employeeEditId').value = '';
+  document.getElementById('employeeFormTitle').textContent = 'Add Employee';
+  document.getElementById('currentDocument').style.display = 'none';
+  loadDepartmentsForForm().then(() => {
     document.getElementById('addEmployeeForm').style.display = 'block';
+    document.getElementById('addEmployeeForm').scrollIntoView({ behavior: 'smooth' });
   });
+}
+
+function initEmployeeForm() {
+  const addBtn = document.getElementById('btnDirAddEmployee');
+  if (addBtn) addBtn.addEventListener('click', openEmployeeForm);
 
   document.getElementById('btnCancelEmployee').addEventListener('click', () => {
     document.getElementById('addEmployeeForm').style.display = 'none';
@@ -213,6 +223,11 @@ function initEmployeeForm() {
     formData.append('mobile', document.getElementById('employeeMobile').value.trim());
     formData.append('email_id', document.getElementById('employeeEmail').value.trim());
     formData.append('department_id', document.getElementById('employeeDepartment').value);
+    formData.append('joining_date', document.getElementById('employeeJoining').value);
+    formData.append('birthday', document.getElementById('employeeBirthday').value);
+    formData.append('work_start_time', document.getElementById('employeeWorkStart').value);
+    formData.append('annual_leave_days', document.getElementById('employeeAnnualLeave').value);
+    formData.append('track_visit_time', document.getElementById('employeeTrackVisit').checked ? 'true' : 'false');
 
     const fileInput = document.getElementById('employeeDocument');
     if (fileInput.files[0]) formData.append('document', fileInput.files[0]);
@@ -231,7 +246,8 @@ function initEmployeeForm() {
       }
       document.getElementById('addEmployeeForm').style.display = 'none';
       await loadEmployees();
-      await loadEmployeesTable();
+      if (typeof loadEmployeeDirectory === 'function') await loadEmployeeDirectory();
+      if (typeof loadPlanUsageBadge === 'function') loadPlanUsageBadge();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -339,17 +355,6 @@ function initDepartmentForm() {
 }
 
 function initMasters() {
-  document.querySelectorAll('.masters-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.masters-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById('master-departments').style.display =
-        tab.dataset.master === 'departments' ? 'block' : 'none';
-      document.getElementById('master-employees').style.display =
-        tab.dataset.master === 'employees' ? 'block' : 'none';
-    });
-  });
-
   if (currentUser && currentUser.is_admin) {
     initDepartmentForm();
     initEmployeeForm();
@@ -409,10 +414,33 @@ function updateVisitSectionVisibility() {
   }
 }
 
+function updateVisitFieldsForEmployee() {
+  const empId = document.getElementById('attEmployee').value;
+  const emp = employeesCache.find(e => String(e.id) === String(empId));
+  const section = document.getElementById('visitSection');
+  if (!section) return;
+  const show = emp && emp.track_visit_time;
+  section.style.display = show ? '' : 'none';
+  if (!show) {
+    document.getElementById('attVisitFrom').value = '';
+    document.getElementById('attVisitTo').value = '';
+  }
+}
+
+function formatLateCategory(cat) {
+  if (!cat || cat === 'on_time') return '—';
+  if (cat === 'late_5') return '≤5 min';
+  if (cat === 'late_15') return '≤15 min';
+  if (cat === 'late_over_15') return '>15 min';
+  return cat;
+}
+
 function setLeaveMode(onLeave) {
   const fields = document.getElementById('attendanceFields');
+  const halfEl = document.getElementById('attHalfDay');
   if (onLeave) {
     fields.style.display = 'none';
+    if (halfEl) halfEl.value = '';
     document.getElementById('attInTime').value = '';
     document.getElementById('attOutTime').value = '';
     document.getElementById('attBreakTime').value = '';
@@ -421,6 +449,7 @@ function setLeaveMode(onLeave) {
     document.getElementById('attTotalTime').textContent = '—';
   } else {
     fields.style.display = 'block';
+    updateVisitFieldsForEmployee();
     updateVisitSectionVisibility();
     updateTotalTimePreview();
   }
@@ -445,7 +474,10 @@ function initAttendanceForm() {
   const leaveCb = document.getElementById('attLeave');
   const visitToggle = document.getElementById('visitToggle');
 
-  leaveCb.addEventListener('change', () => setLeaveMode(leaveCb.checked));
+  leaveCb.addEventListener('change', () => {
+    if (leaveCb.checked) document.getElementById('attHalfDay').value = '';
+    setLeaveMode(leaveCb.checked);
+  });
 
   visitToggle.addEventListener('click', () => {
     const body = document.getElementById('visitBody');
@@ -465,6 +497,7 @@ function initAttendanceForm() {
   document.getElementById('attEmployee').addEventListener('change', () => {
     isEditMode = false;
     document.getElementById('breakTimeGroup').style.display = 'none';
+    updateVisitFieldsForEmployee();
   });
 
   document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
@@ -474,6 +507,7 @@ function initAttendanceForm() {
       date: document.getElementById('attDate').value,
       employee_id: Number(document.getElementById('attEmployee').value),
       leave: onLeave,
+      half_day: onLeave ? null : (document.getElementById('attHalfDay').value || null),
       in_time: onLeave ? null : (document.getElementById('attInTime').value || null),
       out_time: onLeave ? null : (document.getElementById('attOutTime').value || null),
       break_time: onLeave ? null : (document.getElementById('attBreakTime').value || null),
@@ -523,19 +557,22 @@ async function showTodayAttendance() {
         return `<tr class="leave-row">
           <td>${escapeHtml(a.name || '')}</td>
           <td colspan="6" class="leave-label">On leave</td>
+          <td>—</td>
           <td class="actions-cell">
             <button class="btn btn-sm btn-primary" onclick="loadAttendanceForEditById('${escapeJs(String(a.id))}')">Edit</button>
             <button class="btn btn-sm btn-danger" onclick="deleteAttendance('${escapeJs(String(a.id))}')">Delete</button>
           </td>
         </tr>`;
       }
+      const halfLabel = a.half_day === 'first_half' ? '1st half' : a.half_day === 'second_half' ? '2nd half' : '';
       return `<tr>
-        <td>${escapeHtml(a.name || '')}</td>
+        <td>${escapeHtml(a.name || '')}${halfLabel ? ` <span class="badge-half">${halfLabel}</span>` : ''}</td>
         <td>${formatTime(a.in_time)}</td>
         <td>${formatTime(a.out_time)}</td>
         <td>${formatTime(a.visit_time_from)}</td>
         <td>${formatTime(a.visit_time_to)}</td>
         <td>${formatDuration(a.break_time)}</td>
+        <td>${formatLateCategory(a.late_category)}</td>
         <td>${a.total_time || calcTotalDisplay(a.in_time, a.out_time, a.break_time)}</td>
         <td class="actions-cell">
           <button class="btn btn-sm btn-primary" onclick="loadAttendanceForEditById('${escapeJs(String(a.id))}')">Edit</button>
@@ -558,7 +595,9 @@ function loadAttendanceForEdit(a) {
   document.getElementById('attDate').value = a.date;
   document.getElementById('attEmployee').value = a.employee_id;
   document.getElementById('attLeave').checked = Boolean(a.leave);
+  document.getElementById('attHalfDay').value = a.half_day || '';
   document.getElementById('breakTimeGroup').style.display = 'block';
+  updateVisitFieldsForEmployee();
 
   if (a.leave) {
     setLeaveMode(true);
@@ -659,6 +698,7 @@ function renderRecordsGrouped(attendance) {
               <th>Visit From</th>
               <th>Visit To</th>
               <th>Break</th>
+              <th>Late</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -668,17 +708,19 @@ function renderRecordsGrouped(attendance) {
       if (a.leave) {
         html += `<tr class="leave-row">
           <td>${escapeHtml(a.name || '')}</td>
-          <td colspan="5" class="leave-label">On leave</td>
+          <td colspan="6" class="leave-label">On leave</td>
           <td>—</td>
         </tr>`;
       } else {
+        const halfLabel = a.half_day ? ` (${a.half_day})` : '';
         html += `<tr>
-          <td>${escapeHtml(a.name || '')}</td>
+          <td>${escapeHtml(a.name || '')}${halfLabel}</td>
           <td>${formatTime(a.in_time)}</td>
           <td>${formatTime(a.out_time)}</td>
           <td>${formatTime(a.visit_time_from)}</td>
           <td>${formatTime(a.visit_time_to)}</td>
           <td>${formatDuration(a.break_time)}</td>
+          <td>${formatLateCategory(a.late_category)}</td>
           <td>${a.total_time || calcTotalDisplay(a.in_time, a.out_time, a.break_time)}</td>
         </tr>`;
       }
@@ -729,7 +771,7 @@ async function fetchRecordsForExport() {
 
 function recordsToRows(attendance) {
   return [
-    ['Date', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To', 'Break', 'Total', 'Status'],
+    ['Date', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To', 'Break', 'Late', 'Half Day', 'Total', 'Status'],
     ...attendance.map(a => [
       a.date || '',
       a.name || '',
@@ -738,8 +780,10 @@ function recordsToRows(attendance) {
       a.leave ? '' : (a.visit_time_from || ''),
       a.leave ? '' : (a.visit_time_to || ''),
       a.leave ? '' : formatDuration(a.break_time),
+      a.leave ? '' : formatLateCategory(a.late_category),
+      a.half_day || '',
       a.leave ? '' : (a.total_time || ''),
-      a.leave ? 'On leave' : 'Present'
+      a.leave ? 'On leave' : (a.half_day ? `Half day (${a.half_day})` : 'Present')
     ])
   ];
 }

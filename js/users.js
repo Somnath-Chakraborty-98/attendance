@@ -10,7 +10,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   currentAdminId = user.id;
   document.getElementById('userName').textContent = user.name || user.email;
+
+  const hint = document.getElementById('newUserPasswordHint');
+  if (hint && typeof passwordHint === 'function') hint.textContent = passwordHint();
+
   initSettingsMenu();
+  initUserForm();
   await loadUsers();
 });
 
@@ -24,6 +29,43 @@ function initSettingsMenu() {
     dropdown.classList.toggle('open');
   });
   document.addEventListener('click', () => dropdown.classList.remove('open'));
+}
+
+function initUserForm() {
+  document.getElementById('btnAddUser').addEventListener('click', () => {
+    document.getElementById('userForm').reset();
+    document.getElementById('addUserForm').style.display = 'block';
+  });
+
+  document.getElementById('btnCancelUser').addEventListener('click', () => {
+    document.getElementById('addUserForm').style.display = 'none';
+  });
+
+  document.getElementById('userForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('newUserName').value.trim();
+    const email = document.getElementById('newUserEmail').value.trim();
+    const password = document.getElementById('newUserPassword').value;
+    const is_admin = document.getElementById('newUserAdmin').checked;
+
+    const pwdErr = typeof passwordErrorMessage === 'function' ? passwordErrorMessage(password) : null;
+    if (pwdErr) {
+      showToast(pwdErr, 'error');
+      return;
+    }
+
+    try {
+      await apiRequest('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password, is_admin })
+      });
+      showToast('User account created.', 'success');
+      document.getElementById('addUserForm').style.display = 'none';
+      await loadUsers();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 }
 
 async function apiRequest(path, options = {}) {

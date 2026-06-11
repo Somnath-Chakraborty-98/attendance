@@ -1,7 +1,7 @@
 const TOAST_DURATION = 4500;
 
 function resolveToastType(text, explicitType) {
-  if (/already registered|already exists|account exist/i.test(text)) return 'info';
+  if (/already registered|already exists|account exist|already taken/i.test(text)) return 'info';
   return explicitType || 'neutral';
 }
 
@@ -81,47 +81,25 @@ function initPasswordToggles() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initPasswordToggles();
+
   const loginForm = document.getElementById('loginForm');
-  const signupForm = document.getElementById('signupForm');
-  const toggleSignup = document.getElementById('toggleSignup');
-  const toggleLogin = document.getElementById('toggleLogin');
-  const loginBox = document.getElementById('loginBox');
-  const signupBox = document.getElementById('signupBox');
-  const passwordHintEl = document.getElementById('passwordHint');
-  if (passwordHintEl && typeof passwordHint === 'function') {
-    passwordHintEl.textContent = passwordHint();
+  const orgContext = document.getElementById('orgContext');
+  const changeOrg = document.getElementById('changeOrg');
+
+  if (loginForm && typeof requireOrgOrRedirect === 'function') {
+    if (!requireOrgOrRedirect()) return;
+    if (orgContext && typeof getOrgName === 'function') {
+      const name = getOrgName();
+      orgContext.textContent = name ? `Sign in to ${name}` : 'Log in to manage workforce attendance';
+    }
   }
 
-  function clearForm(form) {
-    if (form) form.reset();
-  }
-
-  function clearAuthForms() {
-    clearForm(loginForm);
-    clearForm(signupForm);
-  }
-
-  function switchToLogin() {
-    clearAuthForms();
-    signupBox.style.display = 'none';
-    loginBox.style.display = 'block';
-  }
-
-  function switchToSignup() {
-    clearAuthForms();
-    loginBox.style.display = 'none';
-    signupBox.style.display = 'block';
-  }
-
-  if (toggleSignup && toggleLogin) {
-    toggleSignup.addEventListener('click', (e) => {
+  if (changeOrg) {
+    changeOrg.addEventListener('click', (e) => {
       e.preventDefault();
-      switchToSignup();
-    });
-
-    toggleLogin.addEventListener('click', (e) => {
-      e.preventDefault();
-      switchToLogin();
+      if (typeof clearOrg === 'function') clearOrg();
+      localStorage.removeItem('token');
+      window.location.href = ROUTES.org;
     });
   }
 
@@ -130,7 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       const email = document.getElementById('loginEmail').value;
       const password = document.getElementById('loginPassword').value;
+      const org_key = typeof getOrgKey === 'function' ? getOrgKey() : '';
       const submitButton = loginForm.querySelector('button[type="submit"]');
+
+      if (!org_key) {
+        showToast('Organization key is missing. Please enter your organization key first.', 'error');
+        setTimeout(() => { window.location.href = ROUTES.org; }, 1500);
+        return;
+      }
 
       showToast('Signing in...', 'neutral');
       if (submitButton) submitButton.disabled = true;
@@ -139,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ email, password, org_key })
         });
         const json = await readResponse(res);
         if (!res.ok) {
@@ -149,65 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         localStorage.setItem('token', json.token);
-        clearForm(loginForm);
+        if (json.org_name && typeof setOrg === 'function') setOrg(json.org_key || org_key, json.org_name);
+        loginForm.reset();
         showToast('Login successful! Redirecting...', 'success', { duration: 2000 });
         setTimeout(() => { window.location.href = ROUTES.dashboard; }, 800);
       } catch (err) {
         console.error('login error', err);
         showToast('Login failed (network)', 'error');
-      } finally {
-        if (submitButton) submitButton.disabled = false;
-      }
-    });
-  }
-
-  if (signupForm) {
-    signupForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('signupEmail').value;
-      const password = document.getElementById('signupPassword').value;
-      const name = document.getElementById('signupName').value;
-      const submitButton = signupForm.querySelector('button[type="submit"]');
-
-      showToast('Creating account...', 'neutral');
-      if (submitButton) submitButton.disabled = true;
-
-      const pwdErr = typeof passwordErrorMessage === 'function' ? passwordErrorMessage(password) : null;
-      if (pwdErr) {
-        showToast(pwdErr, 'error');
-        if (submitButton) submitButton.disabled = false;
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, name })
-        });
-        const json = await readResponse(res);
-        if (!res.ok) {
-          console.error('signup error', json);
-          const errorText = json.error || 'Signup failed';
-          showToast(errorText, resolveToastType(errorText, 'error'));
-          return;
-        }
-
-        showToast(
-          'Account created! A confirmation email has been sent. Please confirm your email before signing in.',
-          'success',
-          {
-            duration: 8000,
-            action: {
-              label: 'Go to Sign In',
-              onClick: switchToLogin
-            }
-          }
-        );
-        clearForm(signupForm);
-      } catch (err) {
-        console.error('signup network error', err);
-        showToast('Signup failed (network)', 'error');
       } finally {
         if (submitButton) submitButton.disabled = false;
       }
@@ -228,7 +161,11 @@ async function readResponse(res) {
 async function checkAuth() {
   const token = localStorage.getItem('token');
   if (!token) {
-    window.location.href = ROUTES.login;
+    if (typeof getOrgKey === 'function' && !getOrgKey()) {
+      window.location.href = ROUTES.org;
+    } else {
+      window.location.href = ROUTES.login;
+    }
     return null;
   }
 
@@ -240,6 +177,9 @@ async function checkAuth() {
       return null;
     }
     const json = await res.json();
+    if (json.user?.org_key && typeof setOrg === 'function') {
+      setOrg(json.user.org_key, json.user.org_name);
+    }
     return json.user;
   } catch (err) {
     console.error('checkAuth error', err);

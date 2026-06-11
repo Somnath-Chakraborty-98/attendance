@@ -1,5 +1,7 @@
 const ROUTES = {
+  org: '/',
   login: '/login',
+  createOrganization: '/create-organization',
   dashboard: '/dashboard',
   users: '/users',
   verify: '/verify',

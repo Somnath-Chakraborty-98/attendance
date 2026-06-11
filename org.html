@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StanzaHR - Organization</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <h1>StanzaHR</h1>
+        <p>Enter your organization key to continue</p>
+      </div>
+
+      <form id="orgForm">
+        <div class="form-group">
+          <label for="orgKey">Organization Key</label>
+          <input type="text" id="orgKey" required placeholder="e.g. acme-hr" autocomplete="off">
+          <small class="field-hint">Lowercase letters, numbers, and hyphens only.</small>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Continue</button>
+      </form>
+
+      <p class="auth-switch">
+        New organization?
+        <a href="/create-organization">Create one</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="js/routes.js"></script>
+  <script src="js/org.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    document.getElementById('orgForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const org_key = document.getElementById('orgKey').value.trim();
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      showToast('Verifying organization...', 'neutral');
+
+      try {
+        const res = await fetch('/api/organizations/verify-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ org_key })
+        });
+        const json = await readResponse(res);
+        if (!res.ok) {
+          showToast(json.error || 'Organization not found', 'error');
+          return;
+        }
+        setOrg(json.org_key, json.org_name);
+        showToast(`Welcome to ${json.org_name}`, 'success', { duration: 2000 });
+        setTimeout(() => { window.location.href = ROUTES.login; }, 600);
+      } catch (err) {
+        showToast('Network error', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

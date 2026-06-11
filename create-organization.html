@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StanzaHR - Create Organization</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-container auth-container-wide">
+    <div class="auth-card">
+      <div class="auth-header">
+        <h1>StanzaHR</h1>
+        <p>Create your organization and admin account</p>
+      </div>
+
+      <form id="createOrgForm">
+        <h3 class="form-section-title">Organization</h3>
+        <div class="form-group">
+          <label for="orgName">Organization Name</label>
+          <input type="text" id="orgName" required placeholder="e.g. Acme Corp">
+        </div>
+        <div class="form-group">
+          <label for="orgKey">Organization Key</label>
+          <input type="text" id="orgKey" required placeholder="e.g. acme-hr" autocomplete="off">
+          <small class="field-hint" id="orgKeyHint">3–32 chars: lowercase letters, numbers, hyphens. Share this key with your team.</small>
+          <small class="field-hint" id="orgKeyStatus"></small>
+        </div>
+
+        <h3 class="form-section-title">Admin Account</h3>
+        <div class="form-group">
+          <label for="adminName">Full Name</label>
+          <input type="text" id="adminName" required placeholder="Your full name">
+        </div>
+        <div class="form-group">
+          <label for="adminEmail">Email</label>
+          <input type="email" id="adminEmail" required placeholder="Admin email">
+        </div>
+        <div class="form-group">
+          <label for="adminPassword">Password</label>
+          <input type="password" id="adminPassword" required placeholder="Strong password">
+          <small class="field-hint" id="passwordHint"></small>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full">Create Organization</button>
+      </form>
+
+      <p class="auth-switch">
+        Already have an organization key?
+        <a href="/">Enter key</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="js/routes.js"></script>
+  <script src="js/org.js"></script>
+  <script src="js/password.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    const passwordHintEl = document.getElementById('passwordHint');
+    if (passwordHintEl && typeof passwordHint === 'function') passwordHintEl.textContent = passwordHint();
+
+    let keyCheckTimer;
+    document.getElementById('orgKey').addEventListener('input', (e) => {
+      clearTimeout(keyCheckTimer);
+      const status = document.getElementById('orgKeyStatus');
+      status.textContent = '';
+      const val = e.target.value.trim();
+      if (val.length < 3) return;
+      keyCheckTimer = setTimeout(async () => {
+        try {
+          const res = await fetch('/api/organizations/check-key?org_key=' + encodeURIComponent(val));
+          const json = await readResponse(res);
+          if (!res.ok) {
+            status.textContent = json.error || 'Invalid key format';
+            status.style.color = '#c41e3a';
+            return;
+          }
+          status.textContent = json.available ? 'Key is available' : 'Key already taken';
+          status.style.color = json.available ? '#0d7d40' : '#c41e3a';
+        } catch { /* ignore */ }
+      }, 400);
+    });
+
+    document.getElementById('createOrgForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        org_name: document.getElementById('orgName').value.trim(),
+        org_key: document.getElementById('orgKey').value.trim(),
+        admin_name: document.getElementById('adminName').value.trim(),
+        admin_email: document.getElementById('adminEmail').value.trim(),
+        admin_password: document.getElementById('adminPassword').value
+      };
+      const btn = e.target.querySelector('button[type="submit"]');
+      const pwdErr = passwordErrorMessage(payload.admin_password);
+      if (pwdErr) {
+        showToast(pwdErr, 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      showToast('Creating organization...', 'neutral');
+      try {
+        const res = await fetch('/api/organizations/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await readResponse(res);
+        if (!res.ok) {
+          showToast(json.error || 'Failed to create organization', 'error');
+          return;
+        }
+        setOrg(json.organization.org_key, json.organization.org_name);
+        showToast('Organization created! Check your email to verify your admin account.', 'success', { duration: 8000 });
+        e.target.reset();
+        document.getElementById('orgKeyStatus').textContent = '';
+      } catch (err) {
+        showToast('Network error', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

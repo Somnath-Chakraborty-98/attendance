@@ -2,16 +2,19 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/login", "destination": "/index.html" },
+    { "source": "/create-organization", "destination": "/create-organization.html" },
     { "source": "/dashboard", "destination": "/dashboard.html" },
     { "source": "/users", "destination": "/users.html" },
     { "source": "/verify", "destination": "/verify.html" },
     { "source": "/forgot-password", "destination": "/forgot-password.html" },
     { "source": "/reset-password", "destination": "/reset-password.html" },
-    { "source": "/", "destination": "/index.html" }
+    { "source": "/", "destination": "/org.html" }
   ],
   "redirects": [
     { "source": "/index.html", "destination": "/login", "permanent": true },
+    { "source": "/org.html", "destination": "/", "permanent": true },
     { "source": "/dashboard.html", "destination": "/dashboard", "permanent": true },
+    { "source": "/create-organization.html", "destination": "/create-organization", "permanent": true },
     { "source": "/users.html", "destination": "/users", "permanent": true },
     { "source": "/verify.html", "destination": "/verify", "permanent": false },
     { "source": "/forgot-password.html", "destination": "/forgot-password", "permanent": true },

@@ -8,7 +8,7 @@
 </head>
 <body class="dashboard-page">
   <nav class="navbar">
-    <div class="nav-brand">StanzaHR</div>
+    <div class="nav-brand">StanzaHR <span id="navOrgName" class="nav-org"></span></div>
     <div class="nav-user">
       <span id="userName"></span>
       <div class="settings-menu">
@@ -24,16 +24,45 @@
   <div class="dashboard">
     <aside class="sidebar">
       <nav>
-        <a href="#" class="nav-item active" data-tab="attendance">Mark Attendance</a>
-        <a href="#" class="nav-item" data-tab="records">View Records</a>
-        <a href="#" class="nav-item admin-only" data-tab="masters" id="mastersNav" style="display:none;">Masters</a>
+        <a href="#" class="nav-item active" data-tab="dashboard">Dashboard</a>
+        <a href="#" class="nav-item" data-tab="attendance">Mark Attendance</a>
+        <a href="#" class="nav-item" data-tab="records">Attendance History</a>
+        <a href="#" class="nav-item" data-tab="late">Late Tracking</a>
+        <a href="#" class="nav-item" data-tab="leave">Leave Management</a>
+        <a href="#" class="nav-item" data-tab="employees">Employees</a>
+        <a href="#" class="nav-item admin-only" data-tab="organization" id="orgNav" style="display:none;">Organization</a>
+        <a href="#" class="nav-item" data-tab="reports">Reports</a>
       </nav>
     </aside>
 
     <main class="main-content">
 
+      <!-- Dashboard Overview -->
+      <section id="tab-dashboard" class="tab-content">
+        <div class="section-header">
+          <h2>Dashboard</h2>
+          <input type="date" id="dashboardDate" class="dashboard-date-input">
+        </div>
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card"><span class="stat-value" id="statTotal">—</span><span class="stat-label">Total Employees</span></div>
+          <div class="stat-card stat-present"><span class="stat-value" id="statPresent">—</span><span class="stat-label">Present Today</span></div>
+          <div class="stat-card stat-absent"><span class="stat-value" id="statAbsent">—</span><span class="stat-label">Absent Today</span></div>
+          <div class="stat-card stat-leave"><span class="stat-value" id="statLeave">—</span><span class="stat-label">On Leave</span></div>
+        </div>
+        <div class="dashboard-panels">
+          <div class="form-panel dashboard-panel">
+            <h3>Upcoming Birthdays</h3>
+            <ul id="birthdayList" class="reminder-list"><li class="text-muted">Loading...</li></ul>
+          </div>
+          <div class="form-panel dashboard-panel">
+            <h3>Reminders</h3>
+            <ul id="reminderList" class="reminder-list"><li class="text-muted">Loading...</li></ul>
+          </div>
+        </div>
+      </section>
+
       <!-- Mark Attendance -->
-      <section id="tab-attendance" class="tab-content">
+      <section id="tab-attendance" class="tab-content" style="display:none;">
         <div class="section-header">
           <h2>Mark Attendance</h2>
         </div>
@@ -52,10 +81,20 @@
             </div>
           </div>
 
-          <div class="form-group checkbox-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="attLeave"> On Leave
-            </label>
+          <div class="form-row checkbox-row">
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="attLeave"> On Leave (full day)
+              </label>
+            </div>
+            <div class="form-group" id="halfDayGroup">
+              <label for="attHalfDay">Half Day</label>
+              <select id="attHalfDay">
+                <option value="">None</option>
+                <option value="first_half">First Half</option>
+                <option value="second_half">Second Half</option>
+              </select>
+            </div>
           </div>
 
           <div id="attendanceFields">
@@ -75,7 +114,7 @@
               </div>
             </div>
 
-            <div class="collapsible-section" id="visitSection">
+            <div class="collapsible-section" id="visitSection" style="display:none;">
               <button type="button" class="collapsible-toggle" id="visitToggle">
                 Visit Time <span class="toggle-icon">▼</span>
               </button>
@@ -117,12 +156,13 @@
                 <th>Visit From</th>
                 <th>Visit To</th>
                 <th>Break</th>
+                <th>Late</th>
                 <th>Total</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="todayAttendanceBody">
-              <tr><td colspan="8" class="text-center">Select a date to view records</td></tr>
+              <tr><td colspan="9" class="text-center">Select a date to view records</td></tr>
             </tbody>
           </table>
         </div>
@@ -175,18 +215,161 @@
         </div>
       </section>
 
-      <!-- Masters (Admin) -->
-      <section id="tab-masters" class="tab-content" style="display:none;">
-        <div class="section-header">
-          <h2>Masters</h2>
+      <!-- Late Tracking -->
+      <section id="tab-late" class="tab-content" style="display:none;">
+        <div class="section-header"><h2>Late Coming Tracking</h2></div>
+        <div class="filter-bar form-panel">
+          <div class="form-row">
+            <div class="form-group"><label for="lateYear">Year</label><input type="number" id="lateYear" min="2020" max="2099"></div>
+            <div class="form-group"><label for="lateMonth">Month</label>
+              <select id="lateMonth"><option value="">All months</option>
+                <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+                <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+                <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+                <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
+              </select>
+            </div>
+            <div class="form-group"><label for="lateEmployee">Employee</label><select id="lateEmployee"><option value="">All</option></select></div>
+            <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnLoadLate">Load</button></div>
+          </div>
         </div>
+        <div class="table-container">
+          <table class="table"><thead><tr>
+            <th>Employee</th><th>Late ≤5 min</th><th>Late ≤15 min</th><th>Late &gt;15 min</th><th>Total Late</th>
+          </tr></thead><tbody id="lateTableBody"><tr><td colspan="5" class="text-center">Load report</td></tr></tbody></table>
+        </div>
+      </section>
 
+      <!-- Leave Management -->
+      <section id="tab-leave" class="tab-content" style="display:none;">
+        <div class="section-header"><h2>Leave Management</h2></div>
+        <div class="masters-tabs leave-tabs">
+          <button type="button" class="masters-tab active" data-leave-tab="records">Leave Records</button>
+          <button type="button" class="masters-tab" data-leave-tab="balances">Balances</button>
+          <button type="button" class="masters-tab" data-leave-tab="calendar">Leave Calendar</button>
+          <button type="button" class="masters-tab" data-leave-tab="team">Team Leave View</button>
+        </div>
+        <div id="leave-records" class="leave-panel">
+          <div class="filter-bar form-panel">
+            <div class="form-row">
+              <div class="form-group"><label for="leaveYear">Year</label><input type="number" id="leaveYear" min="2020"></div>
+              <div class="form-group"><label for="leaveMonth">Month</label>
+                <select id="leaveMonth"><option value="">All</option>
+                  <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+                  <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+                  <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+                  <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
+                </select>
+              </div>
+              <div class="form-group"><label for="leaveEmployee">Employee</label><select id="leaveEmployee"><option value="">All</option></select></div>
+              <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnLoadLeaves">Load</button></div>
+              <div class="form-group form-actions-inline admin-only" style="display:none;"><button type="button" class="btn btn-secondary" id="btnAddLeave">+ Add Leave</button></div>
+            </div>
+          </div>
+          <div id="addLeaveForm" class="form-panel" style="display:none;">
+            <form id="leaveForm">
+              <div class="form-row">
+                <div class="form-group"><label for="leaveFormEmployee">Employee</label><select id="leaveFormEmployee" required></select></div>
+                <div class="form-group"><label for="leaveFormType">Type</label>
+                  <select id="leaveFormType"><option value="full">Full Day</option><option value="first_half">First Half</option><option value="second_half">Second Half</option></select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="leaveFormStart">Start Date</label><input type="date" id="leaveFormStart" required></div>
+                <div class="form-group"><label for="leaveFormEnd">End Date</label><input type="date" id="leaveFormEnd" required></div>
+              </div>
+              <div class="form-group"><label for="leaveFormReason">Reason</label><input type="text" id="leaveFormReason" placeholder="Optional"></div>
+              <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn btn-secondary" id="btnCancelLeave">Cancel</button></div>
+            </form>
+          </div>
+          <div class="table-container"><table class="table"><thead><tr>
+            <th>Employee</th><th>From</th><th>To</th><th>Type</th><th>Days</th><th>Reason</th><th></th>
+          </tr></thead><tbody id="leaveTableBody"><tr><td colspan="7" class="text-center">Load records</td></tr></tbody></table></div>
+        </div>
+        <div id="leave-balances" class="leave-panel" style="display:none;">
+          <div class="table-container"><table class="table"><thead><tr>
+            <th>Employee</th><th>Quota</th><th>Taken</th><th>Remaining</th>
+          </tr></thead><tbody id="leaveBalanceBody"><tr><td colspan="4" class="text-center">Load balances</td></tr></tbody></table></div>
+        </div>
+        <div id="leave-calendar" class="leave-panel" style="display:none;">
+          <div class="filter-bar form-panel">
+            <div class="form-row">
+              <div class="form-group"><label for="calYear">Year</label><input type="number" id="calYear"></div>
+              <div class="form-group"><label for="calMonth">Month</label><select id="calMonth"></select></div>
+              <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnLoadCalendar">Load</button></div>
+            </div>
+          </div>
+          <div id="leaveCalendarGrid" class="calendar-grid"></div>
+        </div>
+        <div id="leave-team" class="leave-panel" style="display:none;">
+          <div id="teamLeaveList" class="team-leave-list"><p class="text-muted">Load team leave from Leave Records tab first.</p></div>
+        </div>
+      </section>
+
+      <!-- Employee Directory -->
+      <section id="tab-employees" class="tab-content" style="display:none;">
+        <div class="section-header"><h2>Employee Directory</h2>
+          <span id="planUsageBadge" class="plan-usage-badge admin-only" style="display:none;"></span>
+          <button class="btn btn-primary btn-sm admin-only" id="btnDirAddEmployee" style="display:none;">+ Add Employee</button>
+        </div>
+        <div id="employeeTimelinePanel" class="form-panel" style="display:none;">
+          <div class="section-header section-header-sub">
+            <h3 id="timelineEmployeeName">Employee Timeline</h3>
+            <button type="button" class="btn btn-sm btn-secondary" id="btnCloseTimeline">Close</button>
+          </div>
+          <div id="timelineContent"></div>
+        </div>
+        <div id="addEmployeeForm" class="form-panel" style="display:none;">
+          <h4 id="employeeFormTitle">Add Employee</h4>
+          <form id="employeeForm">
+            <input type="hidden" id="employeeEditId">
+            <div class="form-row">
+              <div class="form-group"><label for="employeeName">Name</label><input type="text" id="employeeName" required></div>
+              <div class="form-group"><label for="employeeMobile">Mobile</label><input type="tel" id="employeeMobile"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label for="employeeEmail">Email</label><input type="email" id="employeeEmail"></div>
+              <div class="form-group"><label for="employeeDepartment">Department</label><select id="employeeDepartment"><option value="">Select</option></select></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label for="employeeJoining">Joining Date</label><input type="date" id="employeeJoining"></div>
+              <div class="form-group"><label for="employeeBirthday">Birthday</label><input type="date" id="employeeBirthday"></div>
+              <div class="form-group"><label for="employeeWorkStart">Work Start Time</label><input type="time" id="employeeWorkStart" title="Leave empty for company default"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label for="employeeAnnualLeave">Annual Leave Days</label><input type="number" id="employeeAnnualLeave" min="0" placeholder="Company default"></div>
+              <div class="form-group checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" id="employeeTrackVisit"> Track visit in/out times</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="employeeDocument">Document</label>
+              <input type="file" id="employeeDocument" accept=".pdf,image/*">
+              <div id="currentDocument" class="current-document" style="display:none;"></div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save</button>
+              <button type="button" class="btn btn-secondary" id="btnCancelEmployee">Cancel</button>
+            </div>
+          </form>
+        </div>
+        <div class="table-container" id="employeeDirectoryTable">
+          <table class="table"><thead><tr>
+            <th>Name</th><th>Department</th><th>Joining</th><th>Birthday</th><th>Visit Track</th><th></th>
+          </tr></thead><tbody id="directoryTableBody"><tr><td colspan="6" class="text-center">Loading...</td></tr></tbody></table>
+        </div>
+      </section>
+
+      <!-- Organization (Admin) -->
+      <section id="tab-organization" class="tab-content" style="display:none;">
+        <div class="section-header"><h2>Organization</h2></div>
         <div class="masters-tabs">
-          <button type="button" class="masters-tab active" data-master="departments">Departments</button>
-          <button type="button" class="masters-tab" data-master="employees">Employees</button>
+          <button type="button" class="masters-tab active" data-org-tab="departments">Departments</button>
+          <button type="button" class="masters-tab" data-org-tab="holidays">Holidays</button>
+          <button type="button" class="masters-tab" data-org-tab="settings">Company Settings</button>
         </div>
 
-        <!-- Departments -->
+        <div id="org-departments" class="org-panel">
         <div id="master-departments" class="master-panel">
           <div class="section-header section-header-sub">
             <h3>Departments</h3>
@@ -214,68 +397,92 @@
             </table>
           </div>
         </div>
+        </div>
 
-        <!-- Employees -->
-        <div id="master-employees" class="master-panel" style="display:none;">
+        <div id="org-holidays" class="org-panel" style="display:none;">
           <div class="section-header section-header-sub">
-            <h3>Employees</h3>
-            <button class="btn btn-primary btn-sm" id="btnAddEmployee">+ Add Employee</button>
+            <h3>Holiday Management</h3>
+            <button class="btn btn-primary btn-sm" id="btnAddHoliday">+ Add Holiday</button>
           </div>
-          <div id="addEmployeeForm" class="form-panel" style="display:none;">
-            <h4 id="employeeFormTitle">Add Employee</h4>
-            <form id="employeeForm">
-              <input type="hidden" id="employeeEditId">
+          <div id="addHolidayForm" class="form-panel" style="display:none;">
+            <form id="holidayForm">
               <div class="form-row">
-                <div class="form-group">
-                  <label for="employeeName">Name</label>
-                  <input type="text" id="employeeName" required placeholder="Full name">
-                </div>
-                <div class="form-group">
-                  <label for="employeeMobile">Mobile</label>
-                  <input type="tel" id="employeeMobile" placeholder="Phone number">
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="employeeEmail">Email</label>
-                  <input type="email" id="employeeEmail" placeholder="Email address">
-                </div>
-                <div class="form-group">
-                  <label for="employeeDepartment">Department</label>
-                  <select id="employeeDepartment">
-                    <option value="">Select Department</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="employeeDocument">Document (PDF or image)</label>
-                <input type="file" id="employeeDocument" accept=".pdf,image/*">
-                <small class="field-hint">Optional. PDF, JPG, PNG, GIF, or WebP only.</small>
-                <div id="currentDocument" class="current-document" style="display:none;"></div>
+                <div class="form-group"><label for="holidayName">Holiday Name</label><input type="text" id="holidayName" required></div>
+                <div class="form-group"><label for="holidayDate">Date</label><input type="date" id="holidayDate" required></div>
               </div>
               <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Save</button>
-                <button type="button" class="btn btn-secondary" id="btnCancelEmployee">Cancel</button>
+                <button type="button" class="btn btn-secondary" id="btnCancelHoliday">Cancel</button>
               </div>
             </form>
           </div>
           <div class="table-container">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Mobile</th>
-                  <th>Email</th>
-                  <th>Department</th>
-                  <th>Document</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="employeesTableBody">
-                <tr><td colspan="6" class="text-center">Loading...</td></tr>
-              </tbody>
-            </table>
+            <table class="table"><thead><tr><th>Date</th><th>Name</th><th></th></tr></thead>
+            <tbody id="holidaysTableBody"><tr><td colspan="3" class="text-center">Loading...</td></tr></tbody></table>
           </div>
+        </div>
+
+        <div id="org-settings" class="org-panel" style="display:none;">
+          <div class="form-panel">
+            <h3>Company Calendar Settings</h3>
+            <form id="orgSettingsForm">
+              <div class="form-row">
+                <div class="form-group"><label for="orgWorkStart">Default Work Start</label><input type="time" id="orgWorkStart"></div>
+                <div class="form-group"><label for="orgLateMild">Late threshold (min)</label><input type="number" id="orgLateMild" min="1" max="60"></div>
+                <div class="form-group"><label for="orgLateSevere">Severe late (min)</label><input type="number" id="orgLateSevere" min="1" max="120"></div>
+                <div class="form-group"><label for="orgAnnualLeave">Default annual leave days</label><input type="number" id="orgAnnualLeave" min="0" max="365"></div>
+              </div>
+              <div class="form-actions"><button type="submit" class="btn btn-primary">Save Settings</button></div>
+            </form>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Reports -->
+      <section id="tab-reports" class="tab-content" style="display:none;">
+        <div class="section-header"><h2>Reports</h2></div>
+        <div class="masters-tabs">
+          <button type="button" class="masters-tab active" data-report="attendance">Attendance</button>
+          <button type="button" class="masters-tab" data-report="leave">Leave</button>
+          <button type="button" class="masters-tab" data-report="employees">Employees</button>
+          <button type="button" class="masters-tab" data-report="late">Late Coming</button>
+        </div>
+        <div id="report-attendance" class="report-panel">
+          <div class="filter-bar form-panel">
+            <div class="form-row">
+              <div class="form-group"><label>From</label><input type="date" id="rptAttFrom"></div>
+              <div class="form-group"><label>To</label><input type="date" id="rptAttTo"></div>
+              <div class="form-group"><label>Employee</label><select id="rptAttEmployee"><option value="">All</option></select></div>
+              <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnRptAttendance">Generate</button></div>
+            </div>
+          </div>
+          <div id="rptAttendanceOut" class="report-output"></div>
+        </div>
+        <div id="report-leave" class="report-panel" style="display:none;">
+          <div class="filter-bar form-panel">
+            <div class="form-row">
+              <div class="form-group"><label>Year</label><input type="number" id="rptLeaveYear"></div>
+              <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnRptLeave">Generate</button></div>
+            </div>
+          </div>
+          <div id="rptLeaveOut" class="report-output"></div>
+        </div>
+        <div id="report-employees" class="report-panel" style="display:none;">
+          <div class="form-actions" style="margin-bottom:1rem;">
+            <button type="button" class="btn btn-primary" id="btnRptEmployees">Generate</button>
+          </div>
+          <div id="rptEmployeesOut" class="report-output"></div>
+        </div>
+        <div id="report-late" class="report-panel" style="display:none;">
+          <div class="filter-bar form-panel">
+            <div class="form-row">
+              <div class="form-group"><label>Year</label><input type="number" id="rptLateYear"></div>
+              <div class="form-group"><label>Month</label><select id="rptLateMonth"><option value="">All</option></select></div>
+              <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnRptLate">Generate</button></div>
+            </div>
+          </div>
+          <div id="rptLateOut" class="report-output"></div>
         </div>
       </section>
 
@@ -286,8 +493,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="js/routes.js"></script>
+  <script src="js/org.js"></script>
   <script src="js/duration.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/dashboard.js"></script>
+  <script src="js/dashboard-features.js"></script>
 </body>
 </html>
