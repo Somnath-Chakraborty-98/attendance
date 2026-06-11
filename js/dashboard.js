@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   currentUser = await checkAuth();
   if (!currentUser) return;
 
+  document.documentElement.classList.remove('auth-gate');
+
   document.getElementById('userName').textContent = currentUser.name || currentUser.email;
 
   const navOrg = document.getElementById('navOrgName');

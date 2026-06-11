@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  document.documentElement.classList.remove('auth-gate');
+
   currentAdminId = user.id;
   document.getElementById('userName').textContent = user.name || user.email;
 

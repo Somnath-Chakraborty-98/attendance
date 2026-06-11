@@ -133,7 +133,7 @@ async function checkAuth() {
 }
 
 async function initLoginPage() {
-  if (!getOrgKey()) {
+  if (!isOrgReady()) {
     redirectTo(ROUTES.org);
     return false;
   }
@@ -150,6 +150,7 @@ async function initLoginPage() {
     return false;
   }
 
+  document.documentElement.classList.remove('auth-gate');
   return true;
 }
 
@@ -164,6 +165,7 @@ async function initOrgPage() {
     return false;
   }
 
+  document.documentElement.classList.remove('auth-gate');
   return true;
 }
 
@@ -239,5 +241,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function signOut() {
   localStorage.removeItem('token');
+  sessionStorage.removeItem('stanzahr_org_ready');
   redirectTo(ROUTES.org);
 }
