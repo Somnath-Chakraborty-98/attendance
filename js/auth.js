@@ -79,74 +79,25 @@ function initPasswordToggles() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  initPasswordToggles();
+function revealAuthPage() {
+  document.documentElement.classList.remove('auth-pending');
+}
 
-  const loginForm = document.getElementById('loginForm');
-  const orgContext = document.getElementById('orgContext');
-  const changeOrg = document.getElementById('changeOrg');
+function redirectTo(path) {
+  window.location.replace(path);
+}
 
-  if (loginForm && typeof requireOrgOrRedirect === 'function') {
-    if (!requireOrgOrRedirect()) return;
-    if (orgContext && typeof getOrgName === 'function') {
-      const name = getOrgName();
-      orgContext.textContent = name ? `Sign in to ${name}` : 'Log in to manage workforce attendance';
-    }
+function isLoginPath() {
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  return path === '/login' || path.endsWith('/index.html');
+}
+
+function runEarlyLoginGuard() {
+  if (!isLoginPath()) return;
+  if (typeof getOrgKey === 'function' && !getOrgKey()) {
+    redirectTo(ROUTES.org);
   }
-
-  if (changeOrg) {
-    changeOrg.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (typeof clearOrg === 'function') clearOrg();
-      localStorage.removeItem('token');
-      window.location.href = ROUTES.org;
-    });
-  }
-
-  if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('loginEmail').value;
-      const password = document.getElementById('loginPassword').value;
-      const org_key = typeof getOrgKey === 'function' ? getOrgKey() : '';
-      const submitButton = loginForm.querySelector('button[type="submit"]');
-
-      if (!org_key) {
-        showToast('Organization key is missing. Please enter your organization key first.', 'error');
-        setTimeout(() => { window.location.href = ROUTES.org; }, 1500);
-        return;
-      }
-
-      showToast('Signing in...', 'neutral');
-      if (submitButton) submitButton.disabled = true;
-
-      try {
-        const res = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, org_key })
-        });
-        const json = await readResponse(res);
-        if (!res.ok) {
-          const errorText = json.error || 'Login failed';
-          showToast(errorText, resolveToastType(errorText, 'error'));
-          return;
-        }
-
-        localStorage.setItem('token', json.token);
-        if (json.org_name && typeof setOrg === 'function') setOrg(json.org_key || org_key, json.org_name);
-        loginForm.reset();
-        showToast('Login successful! Redirecting...', 'success', { duration: 2000 });
-        setTimeout(() => { window.location.href = ROUTES.dashboard; }, 800);
-      } catch (err) {
-        console.error('login error', err);
-        showToast('Login failed (network)', 'error');
-      } finally {
-        if (submitButton) submitButton.disabled = false;
-      }
-    });
-  }
-});
+}
 
 async function readResponse(res) {
   const text = await res.text();
@@ -158,22 +109,14 @@ async function readResponse(res) {
   }
 }
 
-async function checkAuth() {
+async function verifyToken() {
   const token = localStorage.getItem('token');
-  if (!token) {
-    if (typeof getOrgKey === 'function' && !getOrgKey()) {
-      window.location.href = ROUTES.org;
-    } else {
-      window.location.href = ROUTES.login;
-    }
-    return null;
-  }
+  if (!token) return null;
 
   try {
     const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {
       localStorage.removeItem('token');
-      window.location.href = ROUTES.login;
       return null;
     }
     const json = await res.json();
@@ -182,14 +125,132 @@ async function checkAuth() {
     }
     return json.user;
   } catch (err) {
-    console.error('checkAuth error', err);
+    console.error('verifyToken error', err);
     localStorage.removeItem('token');
-    window.location.href = ROUTES.login;
     return null;
   }
 }
 
+async function checkAuth() {
+  const user = await verifyToken();
+  if (!user) {
+    redirectTo(ROUTES.org);
+    return null;
+  }
+  revealAuthPage();
+  return user;
+}
+
+async function initLoginPage() {
+  if (!getOrgKey()) {
+    redirectTo(ROUTES.org);
+    return false;
+  }
+
+  const user = await verifyToken();
+  if (user) {
+    redirectTo(ROUTES.dashboard);
+    return false;
+  }
+
+  const orgContext = document.getElementById('orgContext');
+  if (orgContext) {
+    const name = getOrgName();
+    orgContext.textContent = name ? `Sign in to ${name}` : 'Log in to manage workforce attendance';
+  }
+
+  revealAuthPage();
+  return true;
+}
+
+async function initOrgPage() {
+  const user = await verifyToken();
+  if (user) {
+    redirectTo(ROUTES.dashboard);
+    return false;
+  }
+
+  const orgKeyInput = document.getElementById('orgKey');
+  const savedKey = getOrgKey();
+  if (orgKeyInput && savedKey) orgKeyInput.value = savedKey;
+
+  revealAuthPage();
+  return true;
+}
+
+function bindLoginForm(loginForm) {
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    const org_key = getOrgKey();
+    const submitButton = loginForm.querySelector('button[type="submit"]');
+
+    if (!org_key) {
+      showToast('Organization key is missing. Please enter your organization key first.', 'error');
+      redirectTo(ROUTES.org);
+      return;
+    }
+
+    showToast('Signing in...', 'neutral');
+    if (submitButton) submitButton.disabled = true;
+
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, org_key })
+      });
+      const json = await readResponse(res);
+      if (!res.ok) {
+        const errorText = json.error || 'Login failed';
+        showToast(errorText, resolveToastType(errorText, 'error'));
+        return;
+      }
+
+      localStorage.setItem('token', json.token);
+      if (json.org_name) setOrg(json.org_key || org_key, json.org_name);
+      loginForm.reset();
+      showToast('Login successful! Redirecting...', 'success', { duration: 2000 });
+      setTimeout(() => redirectTo(ROUTES.dashboard), 800);
+    } catch (err) {
+      console.error('login error', err);
+      showToast('Login failed (network)', 'error');
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  initPasswordToggles();
+
+  const loginForm = document.getElementById('loginForm');
+  const orgForm = document.getElementById('orgForm');
+  const changeOrg = document.getElementById('changeOrg');
+
+  if (loginForm) {
+    const ready = await initLoginPage();
+    if (!ready) return;
+    bindLoginForm(loginForm);
+  } else if (orgForm) {
+    const ready = await initOrgPage();
+    if (!ready) return;
+  } else {
+    revealAuthPage();
+  }
+
+  if (changeOrg) {
+    changeOrg.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (typeof clearOrg === 'function') clearOrg();
+      localStorage.removeItem('token');
+      redirectTo(ROUTES.org);
+    });
+  }
+});
+
 async function signOut() {
   localStorage.removeItem('token');
-  window.location.href = ROUTES.login;
+  redirectTo(ROUTES.org);
 }

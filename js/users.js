@@ -4,9 +4,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const user = await checkAuth();
   if (!user) return;
   if (!user.is_admin) {
-    window.location.href = ROUTES.dashboard;
+    window.location.replace(ROUTES.dashboard);
     return;
   }
+
+  document.documentElement.classList.remove('auth-pending');
 
   currentAdminId = user.id;
   document.getElementById('userName').textContent = user.name || user.email;

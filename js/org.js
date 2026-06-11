@@ -21,7 +21,7 @@ function clearOrg() {
 
 function requireOrgOrRedirect() {
   if (!getOrgKey()) {
-    window.location.href = ROUTES.org;
+    window.location.replace(ROUTES.org);
     return false;
   }
   return true;

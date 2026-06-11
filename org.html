@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="auth-pending">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -55,7 +55,7 @@
         }
         setOrg(json.org_key, json.org_name);
         showToast(`Welcome to ${json.org_name}`, 'success', { duration: 2000 });
-        setTimeout(() => { window.location.href = ROUTES.login; }, 600);
+        setTimeout(() => { window.location.replace(ROUTES.login); }, 600);
       } catch (err) {
         showToast('Network error', 'error');
       } finally {

@@ -1,10 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="auth-pending">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>StanzaHR - Login</title>
   <link rel="stylesheet" href="css/style.css">
+  <script src="js/routes.js"></script>
+  <script src="js/org.js"></script>
+  <script>
+    (function () {
+      if (!sessionStorage.getItem('stanzahr_org_key')) {
+        window.location.replace('/');
+      }
+    })();
+  </script>
 </head>
 <body class="auth-page">
   <div class="auth-container">
@@ -35,9 +44,6 @@
   </div>
 
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
-
-  <script src="js/routes.js"></script>
-  <script src="js/org.js"></script>
   <script src="js/auth.js"></script>
 </body>
 </html>
