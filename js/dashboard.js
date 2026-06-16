@@ -21,9 +21,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (currentUser.is_admin) {
     document.querySelectorAll('.admin-only').forEach(el => { el.style.display = ''; });
+    const deptTab = document.querySelector('[data-masters-tab="departments"]');
+    const empTab = document.querySelector('[data-masters-tab="employees"]');
+    if (deptTab && empTab) {
+      deptTab.classList.add('active');
+      empTab.classList.remove('active');
+    }
   }
 
   initSettingsMenu();
+  initSidebar();
   initTabs();
   initAttendanceForm();
   initRecordsFilter();
@@ -31,9 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (typeof initDashboardFeatures === 'function') initDashboardFeatures();
   setDefaultAttendanceDate();
   activateTab('attendance');
-  if (window.history.replaceState) {
-    history.replaceState(null, '', ROUTES.dashboard);
-  }
+  normalizeAppUrl();
 
   await loadEmployees();
   if (currentUser.is_admin) await loadDepartments();
@@ -51,6 +56,15 @@ function initSettingsMenu() {
   document.addEventListener('click', () => dropdown.classList.remove('open'));
 }
 
+function normalizeAppUrl() {
+  if (!window.history.replaceState) return;
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  if (path === ROUTES.dashboard) return;
+  if (path === '/dashboard' || path.endsWith('/dashboard.html')) {
+    history.replaceState(null, '', ROUTES.dashboard);
+  }
+}
+
 function activateTab(tab) {
   const navItems = document.querySelectorAll('.sidebar .nav-item[data-tab]');
   navItems.forEach(n => {
@@ -60,25 +74,42 @@ function activateTab(tab) {
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.style.display = 'block';
   if (tab === 'attendance') showTodayAttendance();
-  if (tab === 'employees' && typeof loadEmployeeDirectory === 'function') loadEmployeeDirectory();
-  if (tab === 'organization' && currentUser.is_admin) loadDepartments();
+  if (tab === 'masters') activateMastersPanel();
   if (tab === 'leave' && typeof loadLeaveRecords === 'function') loadLeaveRecords();
   if (tab === 'late' && typeof initLateTab === 'function') initLateTab();
-  if (tab === 'organization' && typeof loadOrgSettings === 'function') {
-    const activeOrgTab = document.querySelector('[data-org-tab].active');
-    if (activeOrgTab?.dataset.orgTab === 'settings') loadOrgSettings();
+}
+
+function activateMastersPanel() {
+  const isAdmin = currentUser?.is_admin;
+  const tabs = document.querySelectorAll('[data-masters-tab]');
+  let activeTab = document.querySelector('[data-masters-tab].active');
+
+  if (!activeTab || (activeTab.classList.contains('admin-only') && !isAdmin)) {
+    tabs.forEach(t => t.classList.remove('active'));
+    const employeesTab = document.querySelector('[data-masters-tab="employees"]');
+    if (employeesTab) {
+      employeesTab.classList.add('active');
+      activeTab = employeesTab;
+    }
   }
+
+  const panelName = activeTab?.dataset.mastersTab || 'employees';
+  ['departments', 'employees', 'settings'].forEach((name) => {
+    const panel = document.getElementById(`masters-${name}`);
+    if (panel) panel.style.display = panelName === name ? 'block' : 'none';
+  });
+
+  if (panelName === 'departments' && isAdmin) loadDepartments();
+  if (panelName === 'employees' && typeof loadEmployeeDirectory === 'function') loadEmployeeDirectory();
+  if (panelName === 'settings' && isAdmin && typeof loadOrgSettings === 'function') loadOrgSettings();
 }
 
 function initTabs() {
   document.querySelectorAll('.sidebar .nav-item[data-tab]').forEach(item => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
-      if (item.dataset.tab === 'organization' && !currentUser.is_admin) return;
+      if (item.dataset.tab === 'masters' && !document.getElementById('tab-masters')) return;
       activateTab(item.dataset.tab);
-      if (window.history.replaceState) {
-        history.replaceState(null, '', ROUTES.dashboard);
-      }
     });
   });
 }

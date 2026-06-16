@@ -14,7 +14,7 @@
         <p>Create your organization and admin account</p>
       </div>
 
-      <form id="createOrgForm">
+      <form id="createOrgForm" autocomplete="off">
         <h3 class="form-section-title">Organization</h3>
         <div class="form-group">
           <label for="orgName">Organization Name</label>
@@ -25,6 +25,11 @@
           <input type="text" id="orgKey" required placeholder="e.g. acme-hr" autocomplete="off">
           <small class="field-hint" id="orgKeyHint">3–32 chars: lowercase letters, numbers, hyphens. Share this key with your team.</small>
           <small class="field-hint" id="orgKeyStatus"></small>
+        </div>
+        <div class="form-group">
+          <label for="orgCountry">Country</label>
+          <select id="orgCountry" required></select>
+          <small class="field-hint" id="orgBillingHint"></small>
         </div>
 
         <h3 class="form-section-title">Admin Account</h3>
@@ -56,10 +61,17 @@
   <script src="js/routes.js"></script>
   <script src="js/org.js"></script>
   <script src="js/password.js"></script>
+  <script src="js/currency.js"></script>
   <script src="js/auth.js"></script>
   <script>
     const passwordHintEl = document.getElementById('passwordHint');
     if (passwordHintEl && typeof passwordHint === 'function') passwordHintEl.textContent = passwordHint();
+
+    fillCountrySelect(document.getElementById('orgCountry'), 'IN');
+    bindCountryBillingHint(
+      document.getElementById('orgCountry'),
+      document.getElementById('orgBillingHint')
+    );
 
     let keyCheckTimer;
     document.getElementById('orgKey').addEventListener('input', (e) => {
@@ -88,6 +100,7 @@
       const payload = {
         org_name: document.getElementById('orgName').value.trim(),
         org_key: document.getElementById('orgKey').value.trim(),
+        country: document.getElementById('orgCountry').value,
         admin_name: document.getElementById('adminName').value.trim(),
         admin_email: document.getElementById('adminEmail').value.trim(),
         admin_password: document.getElementById('adminPassword').value
@@ -116,6 +129,8 @@
         showToast('Organization created! Check your email to verify your admin account.', 'success', { duration: 8000 });
         e.target.reset();
         document.getElementById('orgKeyStatus').textContent = '';
+        fillCountrySelect(document.getElementById('orgCountry'), 'IN');
+        document.getElementById('orgCountry').dispatchEvent(new Event('change'));
       } catch (err) {
         showToast('Network error', 'error');
       } finally {

@@ -70,6 +70,38 @@ async function withOrgTx(organizationId, fn) {
     }
 }
 
+const VALID_ORG_COUNTRIES = new Set(['IN', 'US', 'OTHER']);
+
+function currencyForCountry(country) {
+    return country === 'IN' ? 'INR' : 'USD';
+}
+
+function parseOrgCountry(body, { required = false } = {}) {
+    const rawCountry = body?.country;
+
+    if (required && (rawCountry == null || rawCountry === '')) {
+        return { error: 'Country is required' };
+    }
+
+    const country = rawCountry != null && rawCountry !== ''
+        ? String(rawCountry).trim().toUpperCase()
+        : 'IN';
+
+    if (!VALID_ORG_COUNTRIES.has(country)) {
+        return { error: 'Invalid country' };
+    }
+
+    return { country };
+}
+
+function withBillingCurrency(settings) {
+    if (!settings) return settings;
+    return {
+        ...settings,
+        currency: currencyForCountry(settings.country || 'IN')
+    };
+}
+
 async function getFreePlanId(client) {
     const q = await client.query(
         `SELECT id FROM public.plans WHERE plan_key='free' LIMIT 1`
@@ -84,7 +116,7 @@ async function getFreePlanId(client) {
 
 async function getPlanUsage(client, organizationId) {
     const q = await client.query(
-        `SELECT p.plan_key, p.plan_name, p.max_employees,
+        `SELECT p.plan_key, p.plan_name, p.max_employees, o.country,
                 (SELECT COUNT(*)::int FROM public.employees e WHERE e.organization_id = $1) AS employee_count
          FROM public.organizations o
          JOIN public.plans p ON p.id = o.plan_id
@@ -102,6 +134,8 @@ async function getPlanUsage(client, organizationId) {
         plan_name: row.plan_name,
         max_employees: row.max_employees,
         employee_count: row.employee_count,
+        country: row.country || 'IN',
+        currency: currencyForCountry(row.country || 'IN'),
         remaining: row.max_employees != null
             ? Math.max(0, row.max_employees - row.employee_count)
             : null
@@ -587,6 +621,9 @@ app.post('/api/organizations/register', async (req, res) => {
         return res.status(400).json({ error: 'All organization and admin fields are required' });
     }
 
+    const billing = parseOrgCountry(req.body);
+    if (billing.error) return res.status(400).json({ error: billing.error });
+
     const normalizedKey = validateOrgKeyFormat(org_key);
     if (!normalizedKey) {
         return res.status(400).json({ error: 'Organization key must be 3–32 characters: lowercase letters, numbers, and hyphens' });
@@ -618,8 +655,9 @@ app.post('/api/organizations/register', async (req, res) => {
 
             const freePlanId = await getFreePlanId(client);
             const orgInsert = await client.query(
-                'INSERT INTO public.organizations(org_name, org_key, plan_id) VALUES($1,$2,$3) RETURNING id, org_name, org_key',
-                [org_name.trim(), normalizedKey, freePlanId]
+                `INSERT INTO public.organizations(org_name, org_key, plan_id, country)
+                 VALUES($1,$2,$3,$4) RETURNING id, org_name, org_key, country`,
+                [org_name.trim(), normalizedKey, freePlanId, billing.country]
             );
             const organizationId = orgInsert.rows[0].id;
             await setOrgContext(client, organizationId);
@@ -661,7 +699,7 @@ app.post('/api/organizations/register', async (req, res) => {
 
         res.status(201).json({
             message: 'organization_created',
-            organization: result
+            organization: withBillingCurrency(result)
         });
     } catch (err) {
         if (err.status === 409) return res.status(409).json({ error: err.message });
@@ -1347,11 +1385,11 @@ app.get('/api/organization/settings', requireAuth, async (req, res) => {
         const settings = await withOrgTx(orgId(req), async (client) => {
             const q = await client.query(
                 `SELECT default_work_start_time, late_threshold_mild, late_threshold_severe,
-                        default_annual_leave_days
+                        default_annual_leave_days, country
                  FROM public.organizations WHERE id=$1`,
                 [orgId(req)]
             );
-            return q.rows[0];
+            return withBillingCurrency(q.rows[0]);
         });
         res.json({ settings });
     } catch (err) {
@@ -1365,8 +1403,19 @@ app.patch('/api/organization/settings', requireAuth, requireAdmin, async (req, r
         default_work_start_time,
         late_threshold_mild,
         late_threshold_severe,
-        default_annual_leave_days
+        default_annual_leave_days,
+        country
     } = req.body || {};
+
+    let countryValue = null;
+
+    if (country != null && country !== '') {
+        const code = String(country).trim().toUpperCase();
+        if (!VALID_ORG_COUNTRIES.has(code)) {
+            return res.status(400).json({ error: 'Invalid country' });
+        }
+        countryValue = code;
+    }
 
     try {
         const settings = await withOrgTx(orgId(req), async (client) => {
@@ -1375,19 +1424,21 @@ app.patch('/api/organization/settings', requireAuth, requireAdmin, async (req, r
                  SET default_work_start_time = COALESCE($1, default_work_start_time),
                      late_threshold_mild = COALESCE($2, late_threshold_mild),
                      late_threshold_severe = COALESCE($3, late_threshold_severe),
-                     default_annual_leave_days = COALESCE($4, default_annual_leave_days)
-                 WHERE id=$5
+                     default_annual_leave_days = COALESCE($4, default_annual_leave_days),
+                     country = COALESCE($5, country)
+                 WHERE id=$6
                  RETURNING default_work_start_time, late_threshold_mild, late_threshold_severe,
-                           default_annual_leave_days`,
+                           default_annual_leave_days, country`,
                 [
                     default_work_start_time || null,
                     late_threshold_mild != null ? Number(late_threshold_mild) : null,
                     late_threshold_severe != null ? Number(late_threshold_severe) : null,
                     default_annual_leave_days != null ? Number(default_annual_leave_days) : null,
+                    countryValue,
                     orgId(req)
                 ]
             );
-            return q.rows[0];
+            return withBillingCurrency(q.rows[0]);
         });
         res.json({ settings });
     } catch (err) {
@@ -1994,8 +2045,10 @@ app.get('/api/reports/employees', requireAuth, async (req, res) => {
 if (!process.env.VERCEL) {
     const root = path.join(__dirname);
     app.get('/login', (req, res) => res.sendFile(path.join(root, 'login.html')));
-    app.get('/dashboard', (req, res) => res.sendFile(path.join(root, 'dashboard.html')));
-    app.get('/users', (req, res) => res.sendFile(path.join(root, 'users.html')));
+    app.get('/app', (req, res) => res.sendFile(path.join(root, 'dashboard.html')));
+    app.get('/app/u', (req, res) => res.sendFile(path.join(root, 'users.html')));
+    app.get('/dashboard', (req, res) => res.redirect(301, '/app'));
+    app.get('/users', (req, res) => res.redirect(301, '/app/u'));
     app.get('/create-organization', (req, res) => res.sendFile(path.join(root, 'create-organization.html')));
     app.get('/forgot-password', (req, res) => res.sendFile(path.join(root, 'forgot-password.html')));
     app.get('/verify', (req, res) => res.sendFile(path.join(root, 'verify.html')));

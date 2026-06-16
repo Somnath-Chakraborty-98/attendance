@@ -88,6 +88,43 @@ function isLoginPath() {
   return path === '/login' || path.endsWith('/login.html');
 }
 
+function resetAuthPageForms() {
+  document.querySelectorAll('body.auth-page form').forEach((form) => {
+    form.reset();
+    form.querySelectorAll('input[type="password"]').forEach((input) => {
+      input.type = 'password';
+      const toggle = input.closest('.password-field')?.querySelector('.password-toggle');
+      if (toggle) {
+        toggle.textContent = 'Show';
+        toggle.setAttribute('aria-label', 'Show password');
+      }
+    });
+  });
+
+  const orgKeyStatus = document.getElementById('orgKeyStatus');
+  if (orgKeyStatus) {
+    orgKeyStatus.textContent = '';
+    orgKeyStatus.style.color = '';
+  }
+}
+
+function initAuthFormReset() {
+  if (!document.body.classList.contains('auth-page')) return;
+
+  const page = document.documentElement.getAttribute('data-auth-page');
+
+  const reset = () => {
+    resetAuthPageForms();
+    if (page === 'org' && typeof clearOrg === 'function') clearOrg();
+  };
+
+  reset();
+
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) reset();
+  });
+}
+
 async function readResponse(res) {
   const text = await res.text();
   if (!text) return {};
@@ -163,10 +200,6 @@ async function initLoginPage() {
 }
 
 async function initOrgPage() {
-  const orgKeyInput = document.getElementById('orgKey');
-  const savedKey = getOrgKey();
-  if (orgKeyInput && savedKey) orgKeyInput.value = savedKey;
-
   const user = await verifyToken();
   if (user) {
     redirectTo(ROUTES.dashboard);
@@ -222,6 +255,8 @@ function bindLoginForm(loginForm) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initAuthFormReset();
+
   const changeOrg = document.getElementById('changeOrg');
   if (changeOrg) {
     changeOrg.addEventListener('click', handleChangeOrg);

@@ -11,7 +11,7 @@ function initDashboardFeatures() {
 
   fillMonthSelect('rptLateMonth');
 
-  initOrgTabs();
+  initMastersTabs();
   initLeaveForm();
   initOrgSettingsForm();
   initLateReport();
@@ -141,14 +141,12 @@ async function showEmployeeTimeline(id) {
   }
 }
 
-function initOrgTabs() {
-  document.querySelectorAll('[data-org-tab]').forEach(tab => {
+function initMastersTabs() {
+  document.querySelectorAll('[data-masters-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('[data-org-tab]').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('[data-masters-tab]').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      document.getElementById('org-departments').style.display = tab.dataset.orgTab === 'departments' ? 'block' : 'none';
-      document.getElementById('org-settings').style.display = tab.dataset.orgTab === 'settings' ? 'block' : 'none';
-      if (tab.dataset.orgTab === 'settings') loadOrgSettings();
+      if (typeof activateMastersPanel === 'function') activateMastersPanel();
     });
   });
 }
@@ -157,6 +155,11 @@ async function loadOrgSettings() {
   try {
     const { settings } = await apiRequest('/api/organization/settings');
     if (!settings) return;
+    fillCountrySelect(document.getElementById('orgCountry'), settings.country || 'IN');
+    bindCountryBillingHint(
+      document.getElementById('orgCountry'),
+      document.getElementById('orgBillingHint')
+    );
     document.getElementById('orgWorkStart').value = settings.default_work_start_time ? String(settings.default_work_start_time).slice(0, 5) : '09:00';
     document.getElementById('orgLateMild').value = settings.late_threshold_mild;
     document.getElementById('orgLateSevere').value = settings.late_threshold_severe;
@@ -173,6 +176,7 @@ function initOrgSettingsForm() {
       await apiRequest('/api/organization/settings', {
         method: 'PATCH',
         body: JSON.stringify({
+          country: document.getElementById('orgCountry').value,
           default_work_start_time: document.getElementById('orgWorkStart').value,
           late_threshold_mild: Number(document.getElementById('orgLateMild').value),
           late_threshold_severe: Number(document.getElementById('orgLateSevere').value),

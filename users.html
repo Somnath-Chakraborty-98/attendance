@@ -10,26 +10,28 @@
 </head>
 <body class="dashboard-page">
   <nav class="navbar">
-    <div class="nav-brand">StanzaHR</div>
+    <div class="nav-left">
+      <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation" aria-expanded="true">☰</button>
+      <div class="nav-brand">StanzaHR</div>
+    </div>
     <div class="nav-user">
       <span id="userName"></span>
       <div class="settings-menu">
         <button class="btn btn-sm btn-outline settings-btn" id="settingsBtn" type="button" aria-label="Settings">⚙</button>
         <div class="settings-dropdown" id="settingsDropdown">
-          <a href="/users" class="settings-item">Users</a>
+          <a href="/app/u" class="settings-item">Users</a>
           <button type="button" class="settings-item" onclick="signOut()">Logout</button>
         </div>
       </div>
     </div>
   </nav>
 
-  <div class="dashboard">
-    <aside class="sidebar">
+  <div class="dashboard" id="dashboardLayout">
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+    <aside class="sidebar" id="sidebar">
       <nav>
-        <a href="/dashboard" class="nav-item">Mark Attendance</a>
-        <a href="/dashboard" class="nav-item">View Records</a>
-        <a href="/dashboard" class="nav-item">Masters</a>
-        <a href="/users" class="nav-item active">Users</a>
+        <a href="/app" class="nav-item">Dashboard</a>
+        <a href="/app/u" class="nav-item active">Users</a>
       </nav>
     </aside>
 
@@ -38,7 +40,7 @@
         <h2>User Management</h2>
         <div class="section-header-actions">
           <button class="btn btn-primary btn-sm" id="btnAddUser" type="button">+ Create Account</button>
-          <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+          <a href="/app" class="btn btn-secondary">Back to Dashboard</a>
         </div>
       </div>
       <p class="section-desc">Create accounts and manage admin access for your organization.</p>
@@ -99,6 +101,7 @@
   <script src="js/org.js"></script>
   <script src="js/password.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/sidebar.js"></script>
   <script src="js/users.js"></script>
 </body>
 </html>

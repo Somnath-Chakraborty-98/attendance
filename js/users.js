@@ -1,5 +1,12 @@
 let currentAdminId = null;
 
+function resetUserCreateForm() {
+  const form = document.getElementById('userForm');
+  const panel = document.getElementById('addUserForm');
+  if (form) form.reset();
+  if (panel) panel.style.display = 'none';
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const user = await checkAuth();
   if (!user) return;
@@ -17,7 +24,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (hint && typeof passwordHint === 'function') hint.textContent = passwordHint();
 
   initSettingsMenu();
+  initSidebar();
   initUserForm();
+  resetUserCreateForm();
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) resetUserCreateForm();
+  });
   await loadUsers();
 });
 

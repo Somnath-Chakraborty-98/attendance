@@ -10,28 +10,31 @@
 </head>
 <body class="dashboard-page">
   <nav class="navbar">
-    <div class="nav-brand">StanzaHR <span id="navOrgName" class="nav-org"></span></div>
+    <div class="nav-left">
+      <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation" aria-expanded="true">☰</button>
+      <div class="nav-brand">StanzaHR <span id="navOrgName" class="nav-org"></span></div>
+    </div>
     <div class="nav-user">
       <span id="userName"></span>
       <div class="settings-menu">
         <button class="btn btn-sm btn-outline settings-btn" id="settingsBtn" type="button" aria-label="Settings">⚙</button>
         <div class="settings-dropdown" id="settingsDropdown">
-          <a href="/users" class="settings-item admin-only" id="usersMenuItem" style="display:none;">Users</a>
+          <a href="/app/u" class="settings-item admin-only" id="usersMenuItem" style="display:none;">Users</a>
           <button type="button" class="settings-item" onclick="signOut()">Logout</button>
         </div>
       </div>
     </div>
   </nav>
 
-  <div class="dashboard">
-    <aside class="sidebar">
+  <div class="dashboard" id="dashboardLayout">
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+    <aside class="sidebar" id="sidebar">
       <nav>
         <a href="#" class="nav-item active" data-tab="attendance">Mark Attendance</a>
         <a href="#" class="nav-item" data-tab="records">Attendance History</a>
         <a href="#" class="nav-item" data-tab="late">Late Tracking</a>
         <a href="#" class="nav-item" data-tab="leave">Leave Management</a>
-        <a href="#" class="nav-item" data-tab="employees">Employees</a>
-        <a href="#" class="nav-item admin-only" data-tab="organization" id="orgNav" style="display:none;">Organization</a>
+        <a href="#" class="nav-item" data-tab="masters" id="mastersNav">Masters</a>
         <a href="#" class="nav-item" data-tab="reports">Reports</a>
       </nav>
     </aside>
@@ -238,99 +241,107 @@
         </div>
       </section>
 
-      <!-- Employee Directory -->
-      <section id="tab-employees" class="tab-content" style="display:none;">
-        <div class="section-header"><h2>Employee Directory</h2>
-          <span id="planUsageBadge" class="plan-usage-badge admin-only" style="display:none;"></span>
-          <button class="btn btn-primary btn-sm admin-only" id="btnDirAddEmployee" style="display:none;">+ Add Employee</button>
-        </div>
-        <div id="employeeTimelinePanel" class="form-panel" style="display:none;">
-          <div class="section-header section-header-sub">
-            <h3 id="timelineEmployeeName">Employee Timeline</h3>
-            <button type="button" class="btn btn-sm btn-secondary" id="btnCloseTimeline">Close</button>
-          </div>
-          <div id="timelineContent"></div>
-        </div>
-        <div id="addEmployeeForm" class="form-panel" style="display:none;">
-          <h4 id="employeeFormTitle">Add Employee</h4>
-          <form id="employeeForm">
-            <input type="hidden" id="employeeEditId">
-            <div class="form-row">
-              <div class="form-group"><label for="employeeName">Name</label><input type="text" id="employeeName" required></div>
-              <div class="form-group"><label for="employeeMobile">Mobile</label><input type="tel" id="employeeMobile"></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="employeeEmail">Email</label><input type="email" id="employeeEmail"></div>
-              <div class="form-group"><label for="employeeDepartment">Department</label><select id="employeeDepartment"><option value="">Select</option></select></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="employeeJoining">Joining Date</label><input type="date" id="employeeJoining"></div>
-              <div class="form-group"><label for="employeeBirthday">Birthday</label><input type="date" id="employeeBirthday"></div>
-            </div>
-            <div class="form-row form-row-with-checkbox">
-              <div class="form-group"><label for="employeeAnnualLeave">Annual Leave Days</label><input type="number" id="employeeAnnualLeave" min="0" placeholder="Company default"></div>
-              <div class="form-group employee-visit-checkbox">
-                <label class="checkbox-label" for="employeeTrackVisit">
-                  <input type="checkbox" id="employeeTrackVisit">
-                  <span>Track visit in/out times</span>
-                </label>
-              </div>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Save</button>
-              <button type="button" class="btn btn-secondary" id="btnCancelEmployee">Cancel</button>
-            </div>
-          </form>
-        </div>
-        <div class="table-container" id="employeeDirectoryTable">
-          <table class="table"><thead><tr>
-            <th>Name</th><th>Department</th><th>Joining</th><th>Birthday</th><th>Visit Track</th><th></th>
-          </tr></thead><tbody id="directoryTableBody"><tr><td colspan="6" class="text-center">Loading...</td></tr></tbody></table>
-        </div>
-      </section>
-
-      <!-- Organization (Admin) -->
-      <section id="tab-organization" class="tab-content" style="display:none;">
-        <div class="section-header"><h2>Organization</h2></div>
+      <!-- Masters: Departments & Employees -->
+      <section id="tab-masters" class="tab-content" style="display:none;">
+        <div class="section-header"><h2>Masters</h2></div>
         <div class="masters-tabs">
-          <button type="button" class="masters-tab active" data-org-tab="departments">Departments</button>
-          <button type="button" class="masters-tab" data-org-tab="settings">Company Settings</button>
+          <button type="button" class="masters-tab admin-only" data-masters-tab="departments" id="mastersTabDepartments" style="display:none;">Departments</button>
+          <button type="button" class="masters-tab active" data-masters-tab="employees">Employees</button>
+          <button type="button" class="masters-tab admin-only" data-masters-tab="settings" id="mastersTabSettings" style="display:none;">Company Settings</button>
         </div>
 
-        <div id="org-departments" class="org-panel">
-        <div id="master-departments" class="master-panel">
-          <div class="section-header section-header-sub">
-            <h3>Departments</h3>
-            <button class="btn btn-primary btn-sm" id="btnAddDepartment">+ Add Department</button>
+        <div id="masters-departments" class="masters-panel admin-only" style="display:none;">
+          <div id="master-departments" class="master-panel">
+            <div class="section-header section-header-sub">
+              <h3>Departments</h3>
+              <button class="btn btn-primary btn-sm" id="btnAddDepartment">+ Add Department</button>
+            </div>
+            <div id="addDepartmentForm" class="form-panel" style="display:none;">
+              <form id="departmentForm">
+                <input type="hidden" id="departmentEditId">
+                <div class="form-group">
+                  <label for="departmentName">Department Name</label>
+                  <input type="text" id="departmentName" required placeholder="e.g. Engineering">
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Save</button>
+                  <button type="button" class="btn btn-secondary" id="btnCancelDepartment">Cancel</button>
+                </div>
+              </form>
+            </div>
+            <div class="table-container">
+              <table class="table">
+                <thead><tr><th>Department</th><th>Actions</th></tr></thead>
+                <tbody id="departmentsTableBody">
+                  <tr><td colspan="2" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div id="addDepartmentForm" class="form-panel" style="display:none;">
-            <form id="departmentForm">
-              <input type="hidden" id="departmentEditId">
-              <div class="form-group">
-                <label for="departmentName">Department Name</label>
-                <input type="text" id="departmentName" required placeholder="e.g. Engineering">
+        </div>
+
+        <div id="masters-employees" class="masters-panel" style="display:none;">
+          <div class="section-header section-header-sub">
+            <h3>Employees</h3>
+            <span id="planUsageBadge" class="plan-usage-badge admin-only" style="display:none;"></span>
+            <button class="btn btn-primary btn-sm admin-only" id="btnDirAddEmployee" style="display:none;">+ Add Employee</button>
+          </div>
+          <div id="employeeTimelinePanel" class="form-panel" style="display:none;">
+            <div class="section-header section-header-sub">
+              <h3 id="timelineEmployeeName">Employee Timeline</h3>
+              <button type="button" class="btn btn-sm btn-secondary" id="btnCloseTimeline">Close</button>
+            </div>
+            <div id="timelineContent"></div>
+          </div>
+          <div id="addEmployeeForm" class="form-panel" style="display:none;">
+            <h4 id="employeeFormTitle">Add Employee</h4>
+            <form id="employeeForm">
+              <input type="hidden" id="employeeEditId">
+              <div class="form-row">
+                <div class="form-group"><label for="employeeName">Name</label><input type="text" id="employeeName" required></div>
+                <div class="form-group"><label for="employeeMobile">Mobile</label><input type="tel" id="employeeMobile"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="employeeEmail">Email</label><input type="email" id="employeeEmail"></div>
+                <div class="form-group"><label for="employeeDepartment">Department</label><select id="employeeDepartment"><option value="">Select</option></select></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="employeeJoining">Joining Date</label><input type="date" id="employeeJoining"></div>
+                <div class="form-group"><label for="employeeBirthday">Birthday</label><input type="date" id="employeeBirthday"></div>
+              </div>
+              <div class="form-row form-row-with-checkbox">
+                <div class="form-group"><label for="employeeAnnualLeave">Annual Leave Days</label><input type="number" id="employeeAnnualLeave" min="0" placeholder="Company default"></div>
+                <div class="form-group employee-visit-checkbox">
+                  <label class="checkbox-label" for="employeeTrackVisit">
+                    <input type="checkbox" id="employeeTrackVisit">
+                    <span>Track visit in/out times</span>
+                  </label>
+                </div>
               </div>
               <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Save</button>
-                <button type="button" class="btn btn-secondary" id="btnCancelDepartment">Cancel</button>
+                <button type="button" class="btn btn-secondary" id="btnCancelEmployee">Cancel</button>
               </div>
             </form>
           </div>
-          <div class="table-container">
-            <table class="table">
-              <thead><tr><th>Department</th><th>Actions</th></tr></thead>
-              <tbody id="departmentsTableBody">
-                <tr><td colspan="2" class="text-center">Loading...</td></tr>
-              </tbody>
-            </table>
+          <div class="table-container" id="employeeDirectoryTable">
+            <table class="table"><thead><tr>
+              <th>Name</th><th>Department</th><th>Joining</th><th>Birthday</th><th>Visit Track</th><th></th>
+            </tr></thead><tbody id="directoryTableBody"><tr><td colspan="6" class="text-center">Loading...</td></tr></tbody></table>
           </div>
         </div>
-        </div>
 
-        <div id="org-settings" class="org-panel" style="display:none;">
+        <div id="masters-settings" class="masters-panel admin-only" style="display:none;">
           <div class="form-panel">
             <h3>Company Settings</h3>
             <form id="orgSettingsForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="orgCountry">Country</label>
+                  <select id="orgCountry"></select>
+                  <small class="field-hint" id="orgBillingHint"></small>
+                </div>
+              </div>
               <div class="form-row">
                 <div class="form-group"><label for="orgWorkStart">Default Work Start</label><input type="time" id="orgWorkStart"></div>
                 <div class="form-group"><label for="orgLateMild">Late threshold (min)</label><input type="number" id="orgLateMild" min="1" max="60"></div>
@@ -341,7 +352,6 @@
             </form>
           </div>
         </div>
-
       </section>
 
       <!-- Reports -->
@@ -399,6 +409,8 @@
   <script src="js/org.js"></script>
   <script src="js/duration.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script src="js/currency.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/dashboard-features.js"></script>
 </body>
