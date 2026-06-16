@@ -1,5 +1,5 @@
 const DATE_DISPLAY_RE = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
-const DATE_ISO_RE = /^(\d{4})-(\d{2})-(\d{2})/;
+const DATE_ISO_RE = /^(\d{4}-\d{2}-\d{2})/;
 
 const DATE_FIELD_COLUMNS = new Set([
   'date', 'start_date', 'end_date', 'joining_date', 'birthday'
@@ -41,7 +41,11 @@ function parseDisplayDate(str) {
 function formatDisplayDate(val, empty = '—') {
   const iso = parseIsoDate(val);
   if (!iso) return empty === null ? '' : empty;
-  const [y, mo, d] = iso.split('-');
+  const parts = iso.split('-');
+  if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
+    return empty === null ? '' : empty;
+  }
+  const [y, mo, d] = parts;
   return `${d}-${mo}-${y}`;
 }
 
@@ -55,12 +59,12 @@ function todayIsoDate() {
 
 function setDateField(el, val) {
   if (!el) return;
-  el.value = val ? formatDisplayDate(val, '') : '';
+  el.value = parseIsoDate(val) || '';
 }
 
 function getDateFieldIso(el) {
   if (!el) return '';
-  return parseDisplayDate(el.value.trim()) || parseIsoDate(el.value.trim());
+  return parseIsoDate(el.value) || '';
 }
 
 function formatDateValueForDisplay(val) {
@@ -70,27 +74,10 @@ function formatDateValueForDisplay(val) {
 }
 
 function initDateFields() {
-  document.querySelectorAll('.date-field').forEach((el) => {
-    if (el.dataset.dateBound === '1') return;
-    el.dataset.dateBound = '1';
-
-    el.addEventListener('blur', () => {
-      const raw = el.value.trim();
-      if (!raw) return;
-      const iso = getDateFieldIso(el);
-      if (iso) {
-        setDateField(el, iso);
-      } else {
-        showToast('Use date format DD-MM-YYYY', 'error');
-      }
-    });
-
-    if (el.id === 'attDate') {
-      const refresh = () => {
-        if (typeof showTodayAttendance === 'function') showTodayAttendance();
-      };
-      el.addEventListener('change', refresh);
-      el.addEventListener('blur', refresh);
-    }
+  const attDate = document.getElementById('attDate');
+  if (!attDate || attDate.dataset.dateBound === '1') return;
+  attDate.dataset.dateBound = '1';
+  attDate.addEventListener('change', () => {
+    if (typeof showTodayAttendance === 'function') showTodayAttendance();
   });
 }

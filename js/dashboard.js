@@ -530,7 +530,7 @@ function initAttendanceForm() {
     const onLeave = document.getElementById('attLeave').checked;
     const attDate = getDateFieldIso(document.getElementById('attDate'));
     if (!attDate) {
-      showToast('Enter a valid date (DD-MM-YYYY).', 'error');
+      showToast('Please select a date.', 'error');
       return;
     }
     const payload = {
@@ -621,10 +621,8 @@ function loadAttendanceForEditById(id) {
 
 function loadAttendanceForEdit(a) {
   isEditMode = true;
-  setDateField(
-    document.getElementById('attDate'),
-    a.date || getDateFieldIso(document.getElementById('attDate'))
-  );
+  const dateIso = parseIsoDate(a.date) || getDateFieldIso(document.getElementById('attDate'));
+  setDateField(document.getElementById('attDate'), dateIso);
   document.getElementById('attEmployee').value = a.employee_id != null ? String(a.employee_id) : '';
   document.getElementById('attLeave').checked = Boolean(a.leave);
   document.getElementById('breakTimeGroup').style.display = 'block';
@@ -755,7 +753,7 @@ async function loadRecords() {
   const dateFrom = getDateFieldIso(document.getElementById('filterDateFrom'));
 
   if (!dateFrom) {
-    showToast('Please enter a from date (DD-MM-YYYY).', 'error');
+    showToast('Please select a from date.', 'error');
     return;
   }
 
@@ -776,7 +774,7 @@ async function loadRecords() {
 async function fetchRecordsForExport() {
   const dateFrom = getDateFieldIso(document.getElementById('filterDateFrom'));
   if (!dateFrom) {
-    showToast('Please enter a from date (DD-MM-YYYY) before exporting.', 'error');
+    showToast('Please select a from date before exporting.', 'error');
     return null;
   }
   const { attendance } = await apiRequest(`/api/attendance?${getRecordFilterParams().toString()}`);

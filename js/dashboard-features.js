@@ -250,7 +250,7 @@ function initLeaveForm() {
     const startDate = getDateFieldIso(document.getElementById('leaveFormStart'));
     const endDate = getDateFieldIso(document.getElementById('leaveFormEnd'));
     if (!startDate || !endDate) {
-      showToast('Enter valid start and end dates (DD-MM-YYYY).', 'error');
+      showToast('Enter valid start and end dates.', 'error');
       return;
     }
     try {
@@ -373,7 +373,7 @@ function initReports() {
 
   document.getElementById('btnRptAttendance')?.addEventListener('click', async () => {
     const from = getDateFieldIso(document.getElementById('rptAttFrom'));
-    if (!from) return showToast('Enter a from date (DD-MM-YYYY)', 'error');
+    if (!from) return showToast('Select a from date', 'error');
     const params = new URLSearchParams({ date_from: from });
     const to = getDateFieldIso(document.getElementById('rptAttTo'));
     const emp = document.getElementById('rptAttEmployee').value;

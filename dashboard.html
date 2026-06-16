@@ -51,7 +51,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="attDate">Date</label>
-              <input type="text" id="attDate" class="date-field" required placeholder="DD-MM-YYYY" autocomplete="off">
+              <input type="date" id="attDate" required>
             </div>
             <div class="form-group">
               <label for="attEmployee">Employee</label>
@@ -149,11 +149,11 @@
           <div class="records-filter-grid">
             <div class="form-group records-filter-field">
               <label for="filterDateFrom">From Date</label>
-              <input type="text" id="filterDateFrom" class="date-field" placeholder="DD-MM-YYYY" autocomplete="off">
+              <input type="date" id="filterDateFrom">
             </div>
             <div class="form-group records-filter-field">
               <label for="filterDateTo">To Date</label>
-              <input type="text" id="filterDateTo" class="date-field" placeholder="DD-MM-YYYY" autocomplete="off">
+              <input type="date" id="filterDateTo">
             </div>
             <div class="form-group records-filter-field records-filter-employee">
               <label for="filterDepartment">Department</label>
@@ -175,7 +175,7 @@
               <button class="btn btn-secondary" id="btnExportCsv" type="button">Export CSV</button>
             </div>
           </div>
-          <p class="records-filter-note">Dates use DD-MM-YYYY. To Date: leave empty to view a single day only.</p>
+          <p class="records-filter-note">To Date: leave empty to view a single day only.</p>
         </div>
 
         <div id="recordsContainer" class="records-container">
@@ -236,8 +236,8 @@
                 <div class="form-group"><label for="leaveFormEmployee">Employee</label><select id="leaveFormEmployee" required></select></div>
               </div>
               <div class="form-row">
-                <div class="form-group"><label for="leaveFormStart">Start Date</label><input type="text" id="leaveFormStart" class="date-field" required placeholder="DD-MM-YYYY" autocomplete="off"></div>
-                <div class="form-group"><label for="leaveFormEnd">End Date</label><input type="text" id="leaveFormEnd" class="date-field" required placeholder="DD-MM-YYYY" autocomplete="off"></div>
+                <div class="form-group"><label for="leaveFormStart">Start Date</label><input type="date" id="leaveFormStart" required></div>
+                <div class="form-group"><label for="leaveFormEnd">End Date</label><input type="date" id="leaveFormEnd" required></div>
               </div>
               <div class="form-group"><label for="leaveFormReason">Reason</label><input type="text" id="leaveFormReason" placeholder="Optional"></div>
               <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn btn-secondary" id="btnCancelLeave">Cancel</button></div>
@@ -314,8 +314,8 @@
                 <div class="form-group"><label for="employeeDepartment">Department</label><select id="employeeDepartment"><option value="">Select</option></select></div>
               </div>
               <div class="form-row">
-                <div class="form-group"><label for="employeeJoining">Joining Date</label><input type="text" id="employeeJoining" class="date-field" placeholder="DD-MM-YYYY" autocomplete="off"></div>
-                <div class="form-group"><label for="employeeBirthday">Birthday</label><input type="text" id="employeeBirthday" class="date-field" placeholder="DD-MM-YYYY" autocomplete="off"></div>
+                <div class="form-group"><label for="employeeJoining">Joining Date</label><input type="date" id="employeeJoining"></div>
+                <div class="form-group"><label for="employeeBirthday">Birthday</label><input type="date" id="employeeBirthday"></div>
               </div>
               <div class="form-row form-row-with-checkbox">
                 <div class="form-group"><label for="employeeAnnualLeave">Annual Leave Days</label><input type="number" id="employeeAnnualLeave" min="0" placeholder="Company default"></div>
@@ -374,8 +374,8 @@
         <div id="report-attendance" class="report-panel">
           <div class="filter-bar form-panel">
             <div class="form-row">
-              <div class="form-group"><label>From</label><input type="text" id="rptAttFrom" class="date-field" placeholder="DD-MM-YYYY" autocomplete="off"></div>
-              <div class="form-group"><label>To</label><input type="text" id="rptAttTo" class="date-field" placeholder="DD-MM-YYYY" autocomplete="off"></div>
+              <div class="form-group"><label>From</label><input type="date" id="rptAttFrom"></div>
+              <div class="form-group"><label>To</label><input type="date" id="rptAttTo"></div>
               <div class="form-group"><label>Department</label><select id="rptAttDepartment"><option value="">All</option></select></div>
               <div class="form-group"><label>Employee</label><select id="rptAttEmployee"><option value="">All</option></select></div>
               <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnRptAttendance">Generate</button></div>
