@@ -48,22 +48,75 @@ function fillMonthSelect(id) {
 }
 
 async function populateFeatureDropdowns() {
-  const empOpts = (employeesCache || []).map(e =>
-    `<option value="${e.id}">${escapeHtml(e.name)}</option>`
-  ).join('');
-  const allOpts = `<option value="">All</option>${empOpts}`;
-  const selectOpts = `<option value="">Select Employee</option>${empOpts}`;
+  let departments = [];
+  try {
+    const data = await apiRequest('/api/departments');
+    departments = data.departments || [];
+  } catch (err) {
+    console.error(err);
+  }
 
-  const map = {
-    lateEmployee: allOpts,
-    leaveEmployee: allOpts,
-    rptAttEmployee: allOpts,
-    leaveFormEmployee: selectOpts
-  };
-  Object.entries(map).forEach(([id, html]) => {
+  const deptOptionRows = departments.map(d =>
+    `<option value="${d.id}">${escapeHtml(d.dep_name)}</option>`
+  ).join('');
+
+  const deptSelectIds = [
+    ['filterDepartment', 'All Departments'],
+    ['lateDepartment', 'All'],
+    ['leaveDepartment', 'All'],
+    ['rptAttDepartment', 'All'],
+    ['rptLateDepartment', 'All']
+  ];
+  deptSelectIds.forEach(([id, label]) => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = html;
+    if (el) el.innerHTML = `<option value="">${label}</option>${deptOptionRows}`;
   });
+
+  const filterPairs = [
+    ['filterDepartment', 'filterEmployee', 'All Employees'],
+    ['lateDepartment', 'lateEmployee', 'All'],
+    ['leaveDepartment', 'leaveEmployee', 'All'],
+    ['rptAttDepartment', 'rptAttEmployee', 'All'],
+    ['rptLateDepartment', 'rptLateEmployee', 'All']
+  ];
+  filterPairs.forEach(([deptId, empId, allLabel]) => {
+    bindDepartmentEmployeeFilter(deptId, empId, allLabel);
+  });
+
+  const selectOpts = employeeOptionsHtml({ allLabel: 'Select Employee', selectMode: true });
+  const leaveFormEl = document.getElementById('leaveFormEmployee');
+  if (leaveFormEl) leaveFormEl.innerHTML = selectOpts;
+}
+
+function employeeOptionsHtml({ departmentId = '', allLabel = 'All', selectMode = false } = {}) {
+  let list = employeesCache || [];
+  if (departmentId) {
+    list = list.filter(e => String(e.department_id) === String(departmentId));
+  }
+  const opts = list.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  const label = selectMode ? 'Select Employee' : allLabel;
+  return `<option value="">${label}</option>${opts}`;
+}
+
+function bindDepartmentEmployeeFilter(departmentId, employeeId, allLabel = 'All') {
+  const deptEl = document.getElementById(departmentId);
+  const empEl = document.getElementById(employeeId);
+  if (!deptEl || !empEl) return;
+
+  const refresh = () => {
+    const current = empEl.value;
+    empEl.innerHTML = employeeOptionsHtml({
+      departmentId: deptEl.value,
+      allLabel
+    });
+    if ([...empEl.options].some(o => o.value === current)) empEl.value = current;
+  };
+
+  if (deptEl.dataset.filterBound !== '1') {
+    deptEl.dataset.filterBound = '1';
+    deptEl.addEventListener('change', refresh);
+  }
+  refresh();
 }
 
 async function loadPlanUsageBadge() {
@@ -217,9 +270,11 @@ async function loadLeaveRecords() {
   const year = document.getElementById('leaveYear')?.value;
   const month = document.getElementById('leaveMonth')?.value;
   const employee_id = document.getElementById('leaveEmployee')?.value;
+  const department_id = document.getElementById('leaveDepartment')?.value;
   const params = new URLSearchParams({ year });
   if (month) params.set('month', month);
   if (employee_id) params.set('employee_id', employee_id);
+  if (department_id) params.set('department_id', department_id);
 
   const tbody = document.getElementById('leaveTableBody');
   tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading...</td></tr>';
@@ -266,9 +321,11 @@ function initLateReport() {
     const year = document.getElementById('lateYear').value;
     const month = document.getElementById('lateMonth').value;
     const employee_id = document.getElementById('lateEmployee').value;
+    const department_id = document.getElementById('lateDepartment')?.value;
     const params = new URLSearchParams({ year });
     if (month) params.set('month', month);
     if (employee_id) params.set('employee_id', employee_id);
+    if (department_id) params.set('department_id', department_id);
     const tbody = document.getElementById('lateTableBody');
     try {
       const { summary } = await apiRequest(`/api/reports/late?${params}`);
@@ -313,12 +370,14 @@ function initReports() {
     const params = new URLSearchParams({ date_from: from });
     const to = document.getElementById('rptAttTo').value;
     const emp = document.getElementById('rptAttEmployee').value;
+    const dept = document.getElementById('rptAttDepartment')?.value;
     if (to) params.set('date_to', to);
     if (emp) params.set('employee_id', emp);
+    if (dept) params.set('department_id', dept);
     try {
       const { report } = await apiRequest(`/api/reports/attendance?${params}`);
       renderReportTable('rptAttendanceOut', report, [
-        'date', 'name', 'in_time', 'out_time', 'late_category', 'total_time', 'leave'
+        'date', 'name', 'department_name', 'in_time', 'out_time', 'late_category', 'total_time', 'leave'
       ], 'attendance');
     } catch (err) {
       showToast(err.message, 'error');
@@ -365,8 +424,12 @@ function initReports() {
   document.getElementById('btnRptLate')?.addEventListener('click', async () => {
     const year = document.getElementById('rptLateYear').value;
     const month = document.getElementById('rptLateMonth').value;
+    const emp = document.getElementById('rptLateEmployee')?.value;
+    const dept = document.getElementById('rptLateDepartment')?.value;
     const params = new URLSearchParams({ year });
     if (month) params.set('month', month);
+    if (emp) params.set('employee_id', emp);
+    if (dept) params.set('department_id', dept);
     try {
       const { summary } = await apiRequest(`/api/reports/late?${params}`);
       renderReportTable('rptLateOut', summary, [
@@ -398,6 +461,10 @@ function renderReportTable(containerId, rows, cols, title) {
       let v = r[c];
       if (c === 'leave') v = v ? 'On leave' : 'Present';
       if (c === 'track_visit_time') v = v ? 'Yes' : 'No';
+      if (c === 'total_time' && typeof formatTotalTime === 'function') {
+        v = formatTotalTime(v, r.in_time, r.out_time, r.break_time);
+      }
+      if (c === 'in_time' || c === 'out_time') v = v ? String(v).slice(0, 5) : v;
       if (v && typeof v === 'string' && v.includes('T')) v = v.slice(0, 10);
       return `<td>${escapeHtml(v ?? '—')}</td>`;
     }).join('') + '</tr>';

@@ -236,10 +236,20 @@ function initEmployeeForm() {
   document.getElementById('employeeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const editId = document.getElementById('employeeEditId').value;
+    const mobile = document.getElementById('employeeMobile').value.trim();
+    const email = document.getElementById('employeeEmail').value.trim();
+    if (!mobile) {
+      showToast('Mobile number is required.', 'error');
+      return;
+    }
+    if (!email) {
+      showToast('Email is required.', 'error');
+      return;
+    }
     const payload = {
       name: document.getElementById('employeeName').value.trim(),
-      mobile: document.getElementById('employeeMobile').value.trim(),
-      email_id: document.getElementById('employeeEmail').value.trim(),
+      mobile,
+      email_id: email,
       department_id: document.getElementById('employeeDepartment').value,
       joining_date: document.getElementById('employeeJoining').value,
       birthday: document.getElementById('employeeBirthday').value,
@@ -408,7 +418,8 @@ function formatTime(t) {
 function updateTotalTimePreview() {
   const el = document.getElementById('attTotalTime');
   if (!el) return;
-  el.textContent = calcTotalDisplay(
+  el.textContent = formatTotalTime(
+    null,
     document.getElementById('attInTime').value,
     document.getElementById('attOutTime').value,
     document.getElementById('attBreakTime').value
@@ -499,7 +510,9 @@ function initAttendanceForm() {
   });
 
   ['attInTime', 'attOutTime', 'attBreakTime'].forEach(id => {
-    document.getElementById(id).addEventListener('change', updateTotalTimePreview);
+    const input = document.getElementById(id);
+    input.addEventListener('change', updateTotalTimePreview);
+    input.addEventListener('input', updateTotalTimePreview);
   });
 
   ['attVisitFrom', 'attVisitTo'].forEach(id => {
@@ -584,7 +597,7 @@ async function showTodayAttendance() {
         <td>${formatTime(a.visit_time_to)}</td>
         <td>${formatDuration(a.break_time)}</td>
         <td>${formatLateCategory(a.late_category)}</td>
-        <td>${a.total_time || calcTotalDisplay(a.in_time, a.out_time, a.break_time)}</td>
+        <td>${formatTotalTime(a.total_time, a.in_time, a.out_time, a.break_time)}</td>
         <td class="actions-cell">
           <button class="btn btn-sm btn-primary" onclick="loadAttendanceForEditById('${escapeJs(String(a.id))}')">Edit</button>
           <button class="btn btn-sm btn-danger" onclick="deleteAttendance('${escapeJs(String(a.id))}')">Delete</button>
@@ -643,7 +656,9 @@ function initRecordsFilter() {
   document.getElementById('btnClearFilter').addEventListener('click', () => {
     document.getElementById('filterDateFrom').value = '';
     document.getElementById('filterDateTo').value = '';
+    document.getElementById('filterDepartment').value = '';
     document.getElementById('filterEmployee').value = '';
+    if (typeof populateFeatureDropdowns === 'function') populateFeatureDropdowns();
     document.getElementById('recordsContainer').innerHTML =
       '<p class="text-center records-empty">Use filters to view records</p>';
   });
@@ -655,6 +670,7 @@ function getRecordFilterParams() {
   const dateFrom = document.getElementById('filterDateFrom').value;
   const dateTo = document.getElementById('filterDateTo').value;
   const employeeId = document.getElementById('filterEmployee').value;
+  const departmentId = document.getElementById('filterDepartment')?.value;
   const params = new URLSearchParams();
 
   if (dateFrom) {
@@ -662,6 +678,7 @@ function getRecordFilterParams() {
     if (dateTo) params.set('date_to', dateTo);
   }
   if (employeeId) params.set('employee_id', employeeId);
+  if (departmentId) params.set('department_id', departmentId);
   return params;
 }
 
@@ -714,7 +731,7 @@ function renderRecordsGrouped(attendance) {
           <td>${formatTime(a.visit_time_to)}</td>
           <td>${formatDuration(a.break_time)}</td>
           <td>${formatLateCategory(a.late_category)}</td>
-          <td>${a.total_time || calcTotalDisplay(a.in_time, a.out_time, a.break_time)}</td>
+          <td>${formatTotalTime(a.total_time, a.in_time, a.out_time, a.break_time)}</td>
         </tr>`;
       }
     });
@@ -774,7 +791,7 @@ function recordsToRows(attendance) {
       a.leave ? '' : (a.visit_time_to || ''),
       a.leave ? '' : formatDuration(a.break_time),
       a.leave ? '' : formatLateCategory(a.late_category),
-      a.leave ? '' : (a.total_time || ''),
+      a.leave ? '' : formatTotalTime(a.total_time, a.in_time, a.out_time, a.break_time),
       a.leave ? 'On leave' : 'Present'
     ])
   ];

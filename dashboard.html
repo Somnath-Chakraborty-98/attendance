@@ -156,6 +156,12 @@
               <input type="date" id="filterDateTo">
             </div>
             <div class="form-group records-filter-field records-filter-employee">
+              <label for="filterDepartment">Department</label>
+              <select id="filterDepartment">
+                <option value="">All Departments</option>
+              </select>
+            </div>
+            <div class="form-group records-filter-field records-filter-employee">
               <label for="filterEmployee">Employee</label>
               <select id="filterEmployee">
                 <option value="">All Employees</option>
@@ -191,6 +197,7 @@
                 <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
               </select>
             </div>
+            <div class="form-group"><label for="lateDepartment">Department</label><select id="lateDepartment"><option value="">All</option></select></div>
             <div class="form-group"><label for="lateEmployee">Employee</label><select id="lateEmployee"><option value="">All</option></select></div>
             <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnLoadLate">Load</button></div>
           </div>
@@ -217,6 +224,7 @@
                   <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
                 </select>
               </div>
+              <div class="form-group"><label for="leaveDepartment">Department</label><select id="leaveDepartment"><option value="">All</option></select></div>
               <div class="form-group"><label for="leaveEmployee">Employee</label><select id="leaveEmployee"><option value="">All</option></select></div>
               <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnLoadLeaves">Load</button></div>
               <div class="form-group form-actions-inline admin-only" style="display:none;"><button type="button" class="btn btn-secondary" id="btnAddLeave">+ Add Leave</button></div>
@@ -299,10 +307,10 @@
               <input type="hidden" id="employeeEditId">
               <div class="form-row">
                 <div class="form-group"><label for="employeeName">Name</label><input type="text" id="employeeName" required></div>
-                <div class="form-group"><label for="employeeMobile">Mobile</label><input type="tel" id="employeeMobile"></div>
+                <div class="form-group"><label for="employeeMobile">Mobile</label><input type="tel" id="employeeMobile" required></div>
               </div>
               <div class="form-row">
-                <div class="form-group"><label for="employeeEmail">Email</label><input type="email" id="employeeEmail"></div>
+                <div class="form-group"><label for="employeeEmail">Email</label><input type="email" id="employeeEmail" required></div>
                 <div class="form-group"><label for="employeeDepartment">Department</label><select id="employeeDepartment"><option value="">Select</option></select></div>
               </div>
               <div class="form-row">
@@ -368,6 +376,7 @@
             <div class="form-row">
               <div class="form-group"><label>From</label><input type="date" id="rptAttFrom"></div>
               <div class="form-group"><label>To</label><input type="date" id="rptAttTo"></div>
+              <div class="form-group"><label>Department</label><select id="rptAttDepartment"><option value="">All</option></select></div>
               <div class="form-group"><label>Employee</label><select id="rptAttEmployee"><option value="">All</option></select></div>
               <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnRptAttendance">Generate</button></div>
             </div>
@@ -394,6 +403,8 @@
             <div class="form-row">
               <div class="form-group"><label>Year</label><input type="number" id="rptLateYear"></div>
               <div class="form-group"><label>Month</label><select id="rptLateMonth"><option value="">All</option></select></div>
+              <div class="form-group"><label>Department</label><select id="rptLateDepartment"><option value="">All</option></select></div>
+              <div class="form-group"><label>Employee</label><select id="rptLateEmployee"><option value="">All</option></select></div>
               <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnRptLate">Generate</button></div>
             </div>
           </div>

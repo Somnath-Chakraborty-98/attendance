@@ -385,6 +385,7 @@ function calcTotalTime(inTime, outTime, breakTime) {
 }
 
 function mapAttendanceRow(row) {
+    const totalMins = row.total_time ? pgIntervalToMinutes(row.total_time) : null;
     return {
         id: row.id,
         date: row.date,
@@ -394,7 +395,7 @@ function mapAttendanceRow(row) {
         break_time: row.break_time,
         visit_time_from: row.visit_time_from,
         visit_time_to: row.visit_time_to,
-        total_time: row.total_time,
+        total_time: totalMins != null && totalMins > 0 ? minutesToTime(totalMins) : null,
         leave: row.on_leave,
         half_day: row.half_day,
         late_minutes: row.late_minutes,
@@ -1072,6 +1073,8 @@ app.get('/api/employees', requireAuth, async (req, res) => {
 app.post('/api/employees', requireAuth, requireAdmin, async (req, res) => {
     const { name, mobile, email_id, department_id } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Employee name is required' });
+    if (!mobile || !String(mobile).trim()) return res.status(400).json({ error: 'Mobile number is required' });
+    if (!email_id || !String(email_id).trim()) return res.status(400).json({ error: 'Email is required' });
     const profile = parseEmployeeBody(req.body || {});
 
     try {
@@ -1091,8 +1094,8 @@ app.post('/api/employees', requireAuth, requireAdmin, async (req, res) => {
                            annual_leave_days, created_at`,
                 [
                     name.trim(),
-                    mobile || null,
-                    email_id || null,
+                    String(mobile).trim(),
+                    String(email_id).trim(),
                     department_id ? Number(department_id) : null,
                     null,
                     orgId(req),
@@ -1125,6 +1128,8 @@ async function handleEmployeeUpdate(req, res) {
 
     const { name, mobile, email_id, department_id, remove_document } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Employee name is required' });
+    if (!mobile || !String(mobile).trim()) return res.status(400).json({ error: 'Mobile number is required' });
+    if (!email_id || !String(email_id).trim()) return res.status(400).json({ error: 'Email is required' });
     const profile = parseEmployeeBody(req.body || {});
 
     try {
@@ -1156,8 +1161,8 @@ async function handleEmployeeUpdate(req, res) {
                            annual_leave_days, created_at`,
                 [
                     name.trim(),
-                    mobile || null,
-                    email_id || null,
+                    String(mobile).trim(),
+                    String(email_id).trim(),
                     department_id ? Number(department_id) : null,
                     docValue,
                     profile.track_visit_time,
@@ -1206,7 +1211,7 @@ app.delete('/api/employees/:id', requireAuth, requireAdmin, async (req, res) => 
 });
 
 app.get('/api/attendance', requireAuth, async (req, res) => {
-    const { date, date_from, date_to, employee_id } = req.query;
+    const { date, date_from, date_to, employee_id, department_id } = req.query;
     const params = [orgId(req)];
     const where = ['a.organization_id = $1'];
 
@@ -1228,6 +1233,11 @@ app.get('/api/attendance', requireAuth, async (req, res) => {
     if (employee_id) {
         params.push(Number(employee_id));
         where.push(`a.employee_id = $${params.length}`);
+    }
+
+    if (department_id) {
+        params.push(Number(department_id));
+        where.push(`e.department_id = $${params.length}`);
     }
 
     const whereSql = `WHERE ${where.join(' AND ')}`;
@@ -1609,7 +1619,7 @@ async function computeLeaveBalance(client, organizationId, employeeId, year) {
 }
 
 app.get('/api/leaves', requireAuth, async (req, res) => {
-    const { employee_id, year, month } = req.query;
+    const { employee_id, department_id, year, month } = req.query;
     const yearNum = year ? Number(year) : new Date().getFullYear();
 
     try {
@@ -1619,6 +1629,10 @@ app.get('/api/leaves', requireAuth, async (req, res) => {
             if (employee_id) {
                 params.push(Number(employee_id));
                 where += ` AND lr.employee_id = $${params.length}`;
+            }
+            if (department_id) {
+                params.push(Number(department_id));
+                where += ` AND e.department_id = $${params.length}`;
             }
             if (year) {
                 params.push(yearNum);
@@ -1898,7 +1912,7 @@ app.get('/api/calendar', requireAuth, async (req, res) => {
 // ── Reports ──
 
 app.get('/api/reports/attendance', requireAuth, async (req, res) => {
-    const { date_from, date_to, employee_id } = req.query;
+    const { date_from, date_to, employee_id, department_id } = req.query;
     if (!date_from) return res.status(400).json({ error: 'date_from is required' });
 
     const params = [orgId(req)];
@@ -1912,6 +1926,10 @@ app.get('/api/reports/attendance', requireAuth, async (req, res) => {
     if (employee_id) {
         params.push(Number(employee_id));
         where.push(`a.employee_id = $${params.length}`);
+    }
+    if (department_id) {
+        params.push(Number(department_id));
+        where.push(`e.department_id = $${params.length}`);
     }
 
     try {
@@ -1941,6 +1959,7 @@ app.get('/api/reports/late', requireAuth, async (req, res) => {
     const year = Number(req.query.year) || new Date().getFullYear();
     const month = req.query.month ? Number(req.query.month) : null;
     const employee_id = req.query.employee_id ? Number(req.query.employee_id) : null;
+    const department_id = req.query.department_id ? Number(req.query.department_id) : null;
 
     try {
         const summary = await withOrgTx(orgId(req), async (client) => {
@@ -1954,6 +1973,10 @@ app.get('/api/reports/late', requireAuth, async (req, res) => {
             if (employee_id) {
                 params.push(employee_id);
                 where += ` AND a.employee_id = $${params.length}`;
+            }
+            if (department_id) {
+                params.push(department_id);
+                where += ` AND e.department_id = $${params.length}`;
             }
 
             const q = await client.query(

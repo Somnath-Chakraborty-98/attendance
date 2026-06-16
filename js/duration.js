@@ -43,11 +43,55 @@ function formatDuration(val) {
   return `${m}m`;
 }
 
+function formatTotalTime(totalTime, inTime, outTime, breakTime) {
+  if (totalTime != null && totalTime !== '') {
+    if (typeof totalTime === 'object' && totalTime !== null) {
+      const mins = pgIntervalToMinutes(totalTime);
+      if (mins > 0) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${h}h ${String(m).padStart(2, '0')}m`;
+      }
+    } else {
+      const raw = String(totalTime);
+      if (raw.includes('T')) {
+        const mins = pgIntervalToMinutes(raw.slice(11, 19));
+        if (mins > 0) {
+          const h = Math.floor(mins / 60);
+          const m = mins % 60;
+          return `${h}h ${String(m).padStart(2, '0')}m`;
+        }
+      }
+      const parts = raw.split(':').map(Number);
+      if (parts.length >= 2 && !Number.isNaN(parts[0])) {
+        const mins = parts[0] * 60 + (parts[1] || 0);
+        if (mins > 0) {
+          const h = Math.floor(mins / 60);
+          const m = mins % 60;
+          return `${h}h ${String(m).padStart(2, '0')}m`;
+        }
+      }
+    }
+  }
+
+  if (!inTime || !outTime) return '—';
+  let total = 0;
+  const inParts = String(inTime).split(':').map(Number);
+  const outParts = String(outTime).split(':').map(Number);
+  total = (outParts[0] * 60 + (outParts[1] || 0)) - (inParts[0] * 60 + (inParts[1] || 0));
+  if (breakTime) total -= pgIntervalToMinutes(breakTime);
+  if (total <= 0) return '0h 00m';
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     pgIntervalToMinutes,
     durationInputToPgInterval,
     durationToInputValue,
-    formatDuration
+    formatDuration,
+    formatTotalTime
   };
 }
