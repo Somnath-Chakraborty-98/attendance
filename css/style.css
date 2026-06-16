@@ -641,6 +641,16 @@ body {
   margin-bottom: 12px;
 }
 
+.form-group-inline-checkbox .checkbox-field {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+}
+
+.form-group-inline-checkbox .checkbox-label {
+  margin-bottom: 0;
+}
+
 .checkbox-label {
   display: inline-flex;
   align-items: center;

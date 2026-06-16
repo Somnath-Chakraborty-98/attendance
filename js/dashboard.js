@@ -150,7 +150,6 @@ function editEmployee(emp) {
   document.getElementById('employeeDepartment').value = emp.department_id || '';
   document.getElementById('employeeJoining').value = emp.joining_date ? String(emp.joining_date).slice(0, 10) : '';
   document.getElementById('employeeBirthday').value = emp.birthday ? String(emp.birthday).slice(0, 10) : '';
-  document.getElementById('employeeWorkStart').value = emp.work_start_time ? String(emp.work_start_time).slice(0, 5) : '';
   document.getElementById('employeeAnnualLeave').value = emp.annual_leave_days ?? '';
   document.getElementById('employeeTrackVisit').checked = Boolean(emp.track_visit_time);
   document.getElementById('employeeFormTitle').textContent = 'Edit Employee';
@@ -213,7 +212,6 @@ function initEmployeeForm() {
       department_id: document.getElementById('employeeDepartment').value,
       joining_date: document.getElementById('employeeJoining').value,
       birthday: document.getElementById('employeeBirthday').value,
-      work_start_time: document.getElementById('employeeWorkStart').value,
       annual_leave_days: document.getElementById('employeeAnnualLeave').value,
       track_visit_time: document.getElementById('employeeTrackVisit').checked ? 'true' : 'false'
     };
