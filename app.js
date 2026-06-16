@@ -384,11 +384,26 @@ function calcTotalTime(inTime, outTime, breakTime) {
     return total > 0 ? minutesToTime(total) : '00:00';
 }
 
+function toIsoDateString(val) {
+    if (!val) return null;
+    if (typeof val === 'string') {
+        const match = val.match(/^(\d{4}-\d{2}-\d{2})/);
+        return match ? match[1] : val.slice(0, 10);
+    }
+    if (val instanceof Date && !Number.isNaN(val.getTime())) {
+        const y = val.getUTCFullYear();
+        const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(val.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+    return String(val).slice(0, 10);
+}
+
 function mapAttendanceRow(row) {
     const totalMins = row.total_time ? pgIntervalToMinutes(row.total_time) : null;
     return {
         id: row.id,
-        date: row.date,
+        date: toIsoDateString(row.date),
         employee_id: row.employee_id,
         in_time: row.in_time,
         out_time: row.out_time,

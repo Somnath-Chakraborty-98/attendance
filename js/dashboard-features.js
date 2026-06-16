@@ -32,6 +32,7 @@ function initDashboardFeatures() {
   });
 
   populateFeatureDropdowns();
+  initDateFields();
 }
 
 function fillMonthSelect(id) {
@@ -157,8 +158,8 @@ async function loadEmployeeDirectory() {
       <tr>
         <td>${escapeHtml(e.name)}</td>
         <td>${escapeHtml(e.department_name || '—')}</td>
-        <td>${e.joining_date ? String(e.joining_date).slice(0, 10) : '—'}</td>
-        <td>${e.birthday ? String(e.birthday).slice(0, 10) : '—'}</td>
+        <td>${formatDisplayDate(e.joining_date)}</td>
+        <td>${formatDisplayDate(e.birthday)}</td>
         <td>${e.track_visit_time ? 'Yes' : 'No'}</td>
         <td class="actions-cell">
           <button class="btn btn-sm btn-secondary" onclick="showEmployeeTimeline('${escapeJs(String(e.id))}')">Timeline</button>
@@ -179,12 +180,12 @@ async function showEmployeeTimeline(id) {
     const data = await apiRequest(`/api/employees/${encodeURIComponent(id)}/timeline`);
     document.getElementById('timelineEmployeeName').textContent = `${data.employee.name} — Timeline`;
     const leaves = [
-      ...data.leave_records.map(l => `<li><strong>${l.start_date}</strong> to ${l.end_date} — ${l.leave_type} (${l.days_count}d) ${escapeHtml(l.reason || '')}</li>`),
-      ...data.attendance_leaves.map(a => `<li><strong>${a.date}</strong> — ${a.on_leave ? 'Full leave' : `Half: ${a.half_day}`}</li>`)
+      ...data.leave_records.map(l => `<li><strong>${formatDisplayDate(l.start_date)}</strong> to ${formatDisplayDate(l.end_date)} — ${l.leave_type} (${l.days_count}d) ${escapeHtml(l.reason || '')}</li>`),
+      ...data.attendance_leaves.map(a => `<li><strong>${formatDisplayDate(a.date)}</strong> — ${a.on_leave ? 'Full leave' : `Half: ${a.half_day}`}</li>`)
     ];
     document.getElementById('timelineContent').innerHTML = `
-      <p><strong>Joining:</strong> ${data.employee.joining_date ? String(data.employee.joining_date).slice(0, 10) : '—'}
-         · <strong>Birthday:</strong> ${data.employee.birthday ? String(data.employee.birthday).slice(0, 10) : '—'}</p>
+      <p><strong>Joining:</strong> ${formatDisplayDate(data.employee.joining_date)}
+         · <strong>Birthday:</strong> ${formatDisplayDate(data.employee.birthday)}</p>
       <h4>Leave History</h4>
       <ul class="timeline-list">${leaves.length ? leaves.join('') : '<li class="text-muted">No leave history</li>'}</ul>
     `;
@@ -246,13 +247,19 @@ function initOrgSettingsForm() {
 function initLeaveForm() {
   document.getElementById('leaveForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const startDate = getDateFieldIso(document.getElementById('leaveFormStart'));
+    const endDate = getDateFieldIso(document.getElementById('leaveFormEnd'));
+    if (!startDate || !endDate) {
+      showToast('Enter valid start and end dates (DD-MM-YYYY).', 'error');
+      return;
+    }
     try {
       await apiRequest('/api/leaves', {
         method: 'POST',
         body: JSON.stringify({
           employee_id: Number(document.getElementById('leaveFormEmployee').value),
-          start_date: document.getElementById('leaveFormStart').value,
-          end_date: document.getElementById('leaveFormEnd').value,
+          start_date: startDate,
+          end_date: endDate,
           leave_type: 'full',
           reason: document.getElementById('leaveFormReason').value.trim()
         })
@@ -288,8 +295,8 @@ async function loadLeaveRecords() {
     tbody.innerHTML = leaveCache.map(l => `
       <tr>
         <td>${escapeHtml(l.employee_name)}</td>
-        <td>${l.start_date}</td>
-        <td>${l.end_date}</td>
+        <td>${formatDisplayDate(l.start_date)}</td>
+        <td>${formatDisplayDate(l.end_date)}</td>
         <td>${l.leave_type}</td>
         <td>${l.days_count}</td>
         <td>${escapeHtml(l.reason || '—')}</td>
@@ -365,10 +372,10 @@ function initReports() {
   initReportTabs();
 
   document.getElementById('btnRptAttendance')?.addEventListener('click', async () => {
-    const from = document.getElementById('rptAttFrom').value;
-    if (!from) return showToast('Select from date', 'error');
+    const from = getDateFieldIso(document.getElementById('rptAttFrom'));
+    if (!from) return showToast('Enter a from date (DD-MM-YYYY)', 'error');
     const params = new URLSearchParams({ date_from: from });
-    const to = document.getElementById('rptAttTo').value;
+    const to = getDateFieldIso(document.getElementById('rptAttTo'));
     const emp = document.getElementById('rptAttEmployee').value;
     const dept = document.getElementById('rptAttDepartment')?.value;
     if (to) params.set('date_to', to);
@@ -465,7 +472,7 @@ function renderReportTable(containerId, rows, cols, title) {
         v = formatTotalTime(v, r.in_time, r.out_time, r.break_time);
       }
       if (c === 'in_time' || c === 'out_time') v = v ? String(v).slice(0, 5) : v;
-      if (v && typeof v === 'string' && v.includes('T')) v = v.slice(0, 10);
+      if (DATE_FIELD_COLUMNS.has(c)) v = formatDateValueForDisplay(v);
       return `<td>${escapeHtml(v ?? '—')}</td>`;
     }).join('') + '</tr>';
   });
@@ -480,9 +487,10 @@ function exportReportData({ rows, cols, title }, format) {
   const dataRows = rows.map(r => cols.map(c => {
     let v = r[c];
     if (c === 'leave') return v ? 'On leave' : 'Present';
+    if (DATE_FIELD_COLUMNS.has(c)) return formatDateValueForDisplay(v) ?? '';
     return v ?? '';
   }));
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = formatDisplayDate(todayIsoDate(), '').replace(/-/g, '');
   const csv = [header, ...dataRows].map(row => row.map(csvCell).join(',')).join('\r\n');
   downloadFile(csv, `stanzahr-${title}-${stamp}.csv`, 'text/csv');
   showToast('Exported.', 'success');

@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMasters();
   if (typeof initDashboardFeatures === 'function') initDashboardFeatures();
   setDefaultAttendanceDate();
+  initDateFields();
   activateTab('attendance');
   normalizeAppUrl();
 
@@ -179,8 +180,8 @@ function editEmployee(emp) {
   document.getElementById('employeeMobile').value = emp.mobile || '';
   document.getElementById('employeeEmail').value = emp.email_id || '';
   document.getElementById('employeeDepartment').value = emp.department_id || '';
-  document.getElementById('employeeJoining').value = emp.joining_date ? String(emp.joining_date).slice(0, 10) : '';
-  document.getElementById('employeeBirthday').value = emp.birthday ? String(emp.birthday).slice(0, 10) : '';
+  setDateField(document.getElementById('employeeJoining'), emp.joining_date);
+  setDateField(document.getElementById('employeeBirthday'), emp.birthday);
   document.getElementById('employeeAnnualLeave').value = emp.annual_leave_days ?? '';
   document.getElementById('employeeTrackVisit').checked = Boolean(emp.track_visit_time);
   document.getElementById('employeeFormTitle').textContent = 'Edit Employee';
@@ -251,8 +252,8 @@ function initEmployeeForm() {
       mobile,
       email_id: email,
       department_id: document.getElementById('employeeDepartment').value,
-      joining_date: document.getElementById('employeeJoining').value,
-      birthday: document.getElementById('employeeBirthday').value,
+      joining_date: getDateFieldIso(document.getElementById('employeeJoining')) || null,
+      birthday: getDateFieldIso(document.getElementById('employeeBirthday')) || null,
       annual_leave_days: document.getElementById('employeeAnnualLeave').value,
       track_visit_time: document.getElementById('employeeTrackVisit').checked ? 'true' : 'false'
     };
@@ -492,8 +493,7 @@ function resetAttendanceForm() {
 }
 
 function setDefaultAttendanceDate() {
-  const el = document.getElementById('attDate');
-  if (el) el.value = new Date().toISOString().split('T')[0];
+  setDateField(document.getElementById('attDate'), todayIsoDate());
 }
 
 function initAttendanceForm() {
@@ -528,8 +528,13 @@ function initAttendanceForm() {
   document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const onLeave = document.getElementById('attLeave').checked;
+    const attDate = getDateFieldIso(document.getElementById('attDate'));
+    if (!attDate) {
+      showToast('Enter a valid date (DD-MM-YYYY).', 'error');
+      return;
+    }
     const payload = {
-      date: document.getElementById('attDate').value,
+      date: attDate,
       employee_id: Number(document.getElementById('attEmployee').value),
       leave: onLeave,
       in_time: onLeave ? null : (document.getElementById('attInTime').value || null),
@@ -554,14 +559,14 @@ function initAttendanceForm() {
     }
   });
 
-  document.getElementById('attDate').addEventListener('change', showTodayAttendance);
+  initDateFields();
 
   document.getElementById('breakTimeGroup').style.display = 'none';
   updateVisitSectionVisibility();
 }
 
 async function showTodayAttendance() {
-  const date = document.getElementById('attDate').value;
+  const date = getDateFieldIso(document.getElementById('attDate'));
   const tbody = document.getElementById('todayAttendanceBody');
   if (!date) {
     tbody.innerHTML = '<tr><td colspan="8" class="text-center">Select a date</td></tr>';
@@ -616,8 +621,11 @@ function loadAttendanceForEditById(id) {
 
 function loadAttendanceForEdit(a) {
   isEditMode = true;
-  document.getElementById('attDate').value = a.date;
-  document.getElementById('attEmployee').value = a.employee_id;
+  setDateField(
+    document.getElementById('attDate'),
+    a.date || getDateFieldIso(document.getElementById('attDate'))
+  );
+  document.getElementById('attEmployee').value = a.employee_id != null ? String(a.employee_id) : '';
   document.getElementById('attLeave').checked = Boolean(a.leave);
   document.getElementById('breakTimeGroup').style.display = 'block';
   updateVisitFieldsForEmployee();
@@ -667,8 +675,8 @@ function initRecordsFilter() {
 }
 
 function getRecordFilterParams() {
-  const dateFrom = document.getElementById('filterDateFrom').value;
-  const dateTo = document.getElementById('filterDateTo').value;
+  const dateFrom = getDateFieldIso(document.getElementById('filterDateFrom'));
+  const dateTo = getDateFieldIso(document.getElementById('filterDateTo'));
   const employeeId = document.getElementById('filterEmployee').value;
   const departmentId = document.getElementById('filterDepartment')?.value;
   const params = new URLSearchParams();
@@ -697,7 +705,7 @@ function renderRecordsGrouped(attendance) {
 
   dates.forEach(date => {
     html += `<div class="records-date-group">
-      <h4 class="records-date-heading">${escapeHtml(date)}</h4>
+      <h4 class="records-date-heading">${escapeHtml(formatDisplayDate(date))}</h4>
       <div class="table-container">
         <table class="table table-attendance">
           <thead>
@@ -744,10 +752,10 @@ function renderRecordsGrouped(attendance) {
 
 async function loadRecords() {
   const container = document.getElementById('recordsContainer');
-  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateFrom = getDateFieldIso(document.getElementById('filterDateFrom'));
 
   if (!dateFrom) {
-    showToast('Please select a from date.', 'error');
+    showToast('Please enter a from date (DD-MM-YYYY).', 'error');
     return;
   }
 
@@ -766,9 +774,9 @@ async function loadRecords() {
 }
 
 async function fetchRecordsForExport() {
-  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateFrom = getDateFieldIso(document.getElementById('filterDateFrom'));
   if (!dateFrom) {
-    showToast('Please select a from date before exporting.', 'error');
+    showToast('Please enter a from date (DD-MM-YYYY) before exporting.', 'error');
     return null;
   }
   const { attendance } = await apiRequest(`/api/attendance?${getRecordFilterParams().toString()}`);
@@ -783,7 +791,7 @@ function recordsToRows(attendance) {
   return [
     ['Date', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To', 'Break', 'Late', 'Total', 'Status'],
     ...attendance.map(a => [
-      a.date || '',
+      formatDisplayDate(a.date, ''),
       a.name || '',
       a.leave ? '' : (a.in_time || ''),
       a.leave ? '' : (a.out_time || ''),
@@ -804,7 +812,7 @@ async function exportRecords() {
     const attendance = await fetchRecordsForExport();
     if (!attendance) return;
     const csv = recordsToRows(attendance).map(row => row.map(csvCell).join(',')).join('\r\n');
-    downloadFile(csv, `stanzahr-records-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    downloadFile(csv, `stanzahr-records-${formatDisplayDate(todayIsoDate(), '').replace(/-/g, '')}.csv`, 'text/csv');
     showToast('CSV exported.', 'success');
   } catch (err) {
     showToast(err.message, 'error');
