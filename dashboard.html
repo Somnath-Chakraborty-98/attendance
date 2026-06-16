@@ -58,12 +58,11 @@
             </div>
           </div>
 
-          <div class="form-row checkbox-row">
-            <div class="form-group checkbox-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="attLeave"> On Leave (full day)
-              </label>
-            </div>
+          <div class="form-group attendance-leave-checkbox">
+            <label class="checkbox-label" for="attLeave">
+              <input type="checkbox" id="attLeave">
+              <span>On Leave (full day)</span>
+            </label>
           </div>
 
           <div id="attendanceFields">
@@ -268,15 +267,13 @@
               <div class="form-group"><label for="employeeJoining">Joining Date</label><input type="date" id="employeeJoining"></div>
               <div class="form-group"><label for="employeeBirthday">Birthday</label><input type="date" id="employeeBirthday"></div>
             </div>
-            <div class="form-row">
+            <div class="form-row form-row-with-checkbox">
               <div class="form-group"><label for="employeeAnnualLeave">Annual Leave Days</label><input type="number" id="employeeAnnualLeave" min="0" placeholder="Company default"></div>
-              <div class="form-group form-group-inline-checkbox">
-                <label for="employeeTrackVisit">Visit tracking</label>
-                <div class="checkbox-field">
-                  <label class="checkbox-label" for="employeeTrackVisit">
-                    <input type="checkbox" id="employeeTrackVisit"> Track visit in/out times
-                  </label>
-                </div>
+              <div class="form-group employee-visit-checkbox">
+                <label class="checkbox-label" for="employeeTrackVisit">
+                  <input type="checkbox" id="employeeTrackVisit">
+                  <span>Track visit in/out times</span>
+                </label>
               </div>
             </div>
             <div class="form-actions">
