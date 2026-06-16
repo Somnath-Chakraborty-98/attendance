@@ -120,6 +120,32 @@ async function assertEmployeeLimit(client, organizationId) {
     return usage;
 }
 
+const PLAN_RANK = { free: 0, pro: 1, business: 2 };
+const FEATURE_MIN_PLAN = {
+    dashboard: 'pro',
+    reminders: 'pro',
+    half_day: 'pro',
+    calendar: 'pro',
+    holidays: 'business',
+    documents: 'business'
+};
+
+function createPlanError(minPlan) {
+    const label = minPlan.charAt(0).toUpperCase() + minPlan.slice(1);
+    const err = new Error(`This feature requires the ${label} plan`);
+    err.status = 403;
+    return err;
+}
+
+async function assertPlanFeature(client, organizationId, feature) {
+    const minPlan = FEATURE_MIN_PLAN[feature];
+    if (!minPlan) return;
+    const usage = await getPlanUsage(client, organizationId);
+    const current = PLAN_RANK[usage.plan_key] ?? 0;
+    const required = PLAN_RANK[minPlan] ?? 0;
+    if (current < required) throw createPlanError(minPlan);
+}
+
 const app = express();
 
 const allowedOrigin = process.env.SITE_URL || '*';
@@ -1005,22 +1031,17 @@ app.get('/api/employees', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/employees', requireAuth, requireAdmin, upload.single('document'), async (req, res) => {
+app.post('/api/employees', requireAuth, requireAdmin, async (req, res) => {
     const { name, mobile, email_id, department_id } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Employee name is required' });
     const profile = parseEmployeeBody(req.body || {});
 
     try {
-        let documents = null;
-        if (req.file) {
-            if (!ALLOWED_DOC_TYPES.has(req.file.mimetype)) {
-                return res.status(400).json({ error: 'Only PDF and image files are allowed' });
-            }
-            documents = await uploadDocument(req.file);
-        }
-
         const employee = await withOrgTx(orgId(req), async (client) => {
             await assertEmployeeLimit(client, orgId(req));
+            if (req.body?.document || req.body?.remove_document === 'true') {
+                await assertPlanFeature(client, orgId(req), 'documents');
+            }
             const q = await client.query(
                 `INSERT INTO public.employees(
                     name, mobile, email_id, department_id, documents, organization_id,
@@ -1035,7 +1056,7 @@ app.post('/api/employees', requireAuth, requireAdmin, upload.single('document'),
                     mobile || null,
                     email_id || null,
                     department_id ? Number(department_id) : null,
-                    documents,
+                    null,
                     orgId(req),
                     profile.track_visit_time,
                     profile.joining_date,
@@ -1054,8 +1075,8 @@ app.post('/api/employees', requireAuth, requireAdmin, upload.single('document'),
     }
 });
 
-app.put('/api/employees/:id', requireAuth, requireAdmin, upload.single('document'), handleEmployeeUpdate);
-app.post('/api/employees/update', requireAuth, requireAdmin, upload.single('document'), (req, res) => {
+app.put('/api/employees/:id', requireAuth, requireAdmin, handleEmployeeUpdate);
+app.post('/api/employees/update', requireAuth, requireAdmin, (req, res) => {
     req.params.id = req.body.id;
     return handleEmployeeUpdate(req, res);
 });
@@ -1069,15 +1090,10 @@ async function handleEmployeeUpdate(req, res) {
     const profile = parseEmployeeBody(req.body || {});
 
     try {
-        let documents = null;
-        if (req.file) {
-            if (!ALLOWED_DOC_TYPES.has(req.file.mimetype)) {
-                return res.status(400).json({ error: 'Only PDF and image files are allowed' });
-            }
-            documents = await uploadDocument(req.file);
-        }
-
         const employee = await withOrgTx(orgId(req), async (client) => {
+            if (remove_document === 'true') {
+                await assertPlanFeature(client, orgId(req), 'documents');
+            }
             const existing = await client.query(
                 'SELECT documents FROM public.employees WHERE id=$1 AND organization_id=$2',
                 [employeeId, orgId(req)]
@@ -1090,7 +1106,6 @@ async function handleEmployeeUpdate(req, res) {
 
             let docValue = existing.rows[0].documents;
             if (remove_document === 'true') docValue = null;
-            if (documents !== null) docValue = documents;
 
             const q = await client.query(
                 `UPDATE public.employees
@@ -1120,6 +1135,7 @@ async function handleEmployeeUpdate(req, res) {
         });
         res.json({ employee });
     } catch (err) {
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         if (err.status === 404) return res.status(404).json({ error: err.message });
         console.error('employee update error', err);
         res.status(500).json({ error: err.message || 'Failed to update employee' });
@@ -1215,15 +1231,17 @@ app.post('/api/attendance', requireAuth, async (req, res) => {
     const isLeave = Boolean(onLeave);
     const halfDayVal = isLeave ? null : (halfDay || null);
     const validHalf = halfDayVal === 'first_half' || halfDayVal === 'second_half' ? halfDayVal : null;
-    const inTime = isLeave ? null : (in_time || null);
-    const outTime = isLeave ? null : (out_time || null);
-    const breakTime = isLeave ? null : durationInputToPgInterval(break_time);
-    const visitFrom = isLeave ? null : (visit_time_from || null);
-    const visitTo = isLeave ? null : (visit_time_to || null);
-    const totalTime = isLeave ? null : calcTotalTime(inTime, outTime, breakTime);
 
     try {
         const row = await withOrgTx(orgId(req), async (client) => {
+            if (validHalf) await assertPlanFeature(client, orgId(req), 'half_day');
+            const inTime = isLeave ? null : (in_time || null);
+            const outTime = isLeave ? null : (out_time || null);
+            const breakTime = isLeave ? null : durationInputToPgInterval(break_time);
+            const visitFrom = isLeave ? null : (visit_time_from || null);
+            const visitTo = isLeave ? null : (visit_time_to || null);
+            const totalTime = isLeave ? null : calcTotalTime(inTime, outTime, breakTime);
+
             const empCheck = await client.query(
                 `SELECT e.id, e.work_start_time, o.default_work_start_time,
                         o.late_threshold_mild, o.late_threshold_severe
@@ -1289,6 +1307,7 @@ app.post('/api/attendance', requireAuth, async (req, res) => {
         res.json({ attendance: mapAttendanceRow(row) });
     } catch (err) {
         if (err.status === 400) return res.status(400).json({ error: err.message });
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('attendance save error', err);
         res.status(500).json({ error: 'Failed to save attendance' });
     }
@@ -1432,6 +1451,7 @@ app.get('/api/holidays', requireAuth, async (req, res) => {
     const { year, month } = req.query;
     try {
         const holidays = await withOrgTx(orgId(req), async (client) => {
+            await assertPlanFeature(client, orgId(req), 'holidays');
             const params = [orgId(req)];
             let where = 'organization_id = $1';
             if (year && month) {
@@ -1450,6 +1470,7 @@ app.get('/api/holidays', requireAuth, async (req, res) => {
         });
         res.json({ holidays });
     } catch (err) {
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('holidays list error', err);
         res.status(500).json({ error: 'Failed to load holidays' });
     }
@@ -1461,6 +1482,7 @@ app.post('/api/holidays', requireAuth, requireAdmin, async (req, res) => {
 
     try {
         const holiday = await withOrgTx(orgId(req), async (client) => {
+            await assertPlanFeature(client, orgId(req), 'holidays');
             const q = await client.query(
                 `INSERT INTO public.holidays(name, holiday_date, organization_id)
                  VALUES($1,$2,$3) RETURNING id, name, holiday_date, created_at`,
@@ -1470,6 +1492,7 @@ app.post('/api/holidays', requireAuth, requireAdmin, async (req, res) => {
         });
         res.status(201).json({ holiday });
     } catch (err) {
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('holiday create error', err);
         if (err.code === '23505') return res.status(409).json({ error: 'Holiday already exists for this date' });
         res.status(500).json({ error: 'Failed to add holiday' });
@@ -1479,6 +1502,7 @@ app.post('/api/holidays', requireAuth, requireAdmin, async (req, res) => {
 app.delete('/api/holidays/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         await withOrgTx(orgId(req), async (client) => {
+            await assertPlanFeature(client, orgId(req), 'holidays');
             const q = await client.query(
                 'DELETE FROM public.holidays WHERE id=$1 AND organization_id=$2 RETURNING id',
                 [req.params.id, orgId(req)]
@@ -1492,6 +1516,7 @@ app.delete('/api/holidays/:id', requireAuth, requireAdmin, async (req, res) => {
         res.json({ ok: true });
     } catch (err) {
         if (err.status === 404) return res.status(404).json({ error: err.message });
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('holiday delete error', err);
         res.status(500).json({ error: 'Failed to delete holiday' });
     }
@@ -1564,17 +1589,20 @@ app.get('/api/leaves', requireAuth, async (req, res) => {
             );
 
             let balances = [];
-            if (employee_id) {
-                const bal = await computeLeaveBalance(client, orgId(req), Number(employee_id), yearNum);
-                if (bal) balances = [{ employee_id: Number(employee_id), ...bal }];
-            } else {
-                const emps = await client.query(
-                    'SELECT id FROM public.employees WHERE organization_id=$1',
-                    [orgId(req)]
-                );
-                for (const e of emps.rows) {
-                    const bal = await computeLeaveBalance(client, orgId(req), e.id, yearNum);
-                    if (bal) balances.push({ employee_id: e.id, ...bal });
+            const usage = await getPlanUsage(client, orgId(req));
+            if ((PLAN_RANK[usage.plan_key] ?? 0) >= PLAN_RANK.pro) {
+                if (employee_id) {
+                    const bal = await computeLeaveBalance(client, orgId(req), Number(employee_id), yearNum);
+                    if (bal) balances = [{ employee_id: Number(employee_id), ...bal }];
+                } else {
+                    const emps = await client.query(
+                        'SELECT id FROM public.employees WHERE organization_id=$1',
+                        [orgId(req)]
+                    );
+                    for (const e of emps.rows) {
+                        const bal = await computeLeaveBalance(client, orgId(req), e.id, yearNum);
+                        if (bal) balances.push({ employee_id: e.id, ...bal });
+                    }
                 }
             }
 
@@ -1598,6 +1626,7 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
 
     try {
         const leave = await withOrgTx(orgId(req), async (client) => {
+            if (type !== 'full') await assertPlanFeature(client, orgId(req), 'half_day');
             const emp = await client.query(
                 'SELECT id FROM public.employees WHERE id=$1 AND organization_id=$2',
                 [employee_id, orgId(req)]
@@ -1622,6 +1651,7 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
         res.status(201).json({ leave });
     } catch (err) {
         if (err.status === 400) return res.status(400).json({ error: err.message });
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('leave create error', err);
         res.status(500).json({ error: 'Failed to create leave record' });
     }
@@ -1656,6 +1686,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 
     try {
         const stats = await withOrgTx(orgId(req), async (client) => {
+            await assertPlanFeature(client, orgId(req), 'dashboard');
             const orgIdVal = orgId(req);
             const totalQ = await client.query(
                 'SELECT COUNT(*)::int AS c FROM public.employees WHERE organization_id=$1',
@@ -1716,6 +1747,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
         });
         res.json({ stats });
     } catch (err) {
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('dashboard stats error', err);
         res.status(500).json({ error: 'Failed to load dashboard stats' });
     }
@@ -1726,6 +1758,7 @@ app.get('/api/dashboard/reminders', requireAuth, async (req, res) => {
 
     try {
         const reminders = await withOrgTx(orgId(req), async (client) => {
+            await assertPlanFeature(client, orgId(req), 'reminders');
             const empQ = await client.query(
                 'SELECT id, name, birthday, joining_date FROM public.employees WHERE organization_id=$1',
                 [orgId(req)]
@@ -1769,6 +1802,7 @@ app.get('/api/dashboard/reminders', requireAuth, async (req, res) => {
         });
         res.json({ reminders });
     } catch (err) {
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('dashboard reminders error', err);
         res.status(500).json({ error: 'Failed to load reminders' });
     }
@@ -1782,6 +1816,7 @@ app.get('/api/calendar', requireAuth, async (req, res) => {
 
     try {
         const calendar = await withOrgTx(orgId(req), async (client) => {
+            await assertPlanFeature(client, orgId(req), 'calendar');
             const holidays = await client.query(
                 `SELECT id, name, holiday_date FROM public.holidays
                  WHERE organization_id=$1
@@ -1803,6 +1838,7 @@ app.get('/api/calendar', requireAuth, async (req, res) => {
         });
         res.json(calendar);
     } catch (err) {
+        if (err.status === 403) return res.status(403).json({ error: err.message });
         console.error('calendar error', err);
         res.status(500).json({ error: 'Failed to load calendar' });
     }

@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMasters();
   if (typeof initDashboardFeatures === 'function') initDashboardFeatures();
   setDefaultAttendanceDate();
-  activateTab('dashboard');
+  activateTab('attendance');
   if (window.history.replaceState) {
     history.replaceState(null, '', ROUTES.dashboard);
   }
@@ -60,15 +60,13 @@ function activateTab(tab) {
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.style.display = 'block';
   if (tab === 'attendance') showTodayAttendance();
-  if (tab === 'dashboard' && typeof loadDashboardStats === 'function') loadDashboardStats();
   if (tab === 'employees' && typeof loadEmployeeDirectory === 'function') loadEmployeeDirectory();
   if (tab === 'organization' && currentUser.is_admin) loadDepartments();
   if (tab === 'leave' && typeof loadLeaveRecords === 'function') loadLeaveRecords();
   if (tab === 'late' && typeof initLateTab === 'function') initLateTab();
-  if (tab === 'organization' && typeof loadHolidays === 'function') {
+  if (tab === 'organization' && typeof loadOrgSettings === 'function') {
     const activeOrgTab = document.querySelector('[data-org-tab].active');
-    if (activeOrgTab?.dataset.orgTab === 'holidays') loadHolidays();
-    if (activeOrgTab?.dataset.orgTab === 'settings' && typeof loadOrgSettings === 'function') loadOrgSettings();
+    if (activeOrgTab?.dataset.orgTab === 'settings') loadOrgSettings();
   }
 }
 
@@ -155,18 +153,7 @@ function editEmployee(emp) {
   document.getElementById('employeeWorkStart').value = emp.work_start_time ? String(emp.work_start_time).slice(0, 5) : '';
   document.getElementById('employeeAnnualLeave').value = emp.annual_leave_days ?? '';
   document.getElementById('employeeTrackVisit').checked = Boolean(emp.track_visit_time);
-  document.getElementById('employeeDocument').value = '';
   document.getElementById('employeeFormTitle').textContent = 'Edit Employee';
-
-  const docEl = document.getElementById('currentDocument');
-  if (emp.documents) {
-    docEl.style.display = 'block';
-    docEl.innerHTML = `Current: <a href="${escapeHtml(emp.documents)}" target="_blank">View document</a>
-      <label class="checkbox-label"><input type="checkbox" id="removeDocument"> Remove document</label>`;
-  } else {
-    docEl.style.display = 'none';
-    docEl.innerHTML = '';
-  }
 
   loadDepartmentsForForm().then(() => {
     document.getElementById('addEmployeeForm').style.display = 'block';
@@ -202,7 +189,6 @@ async function openEmployeeForm() {
   document.getElementById('employeeForm').reset();
   document.getElementById('employeeEditId').value = '';
   document.getElementById('employeeFormTitle').textContent = 'Add Employee';
-  document.getElementById('currentDocument').style.display = 'none';
   loadDepartmentsForForm().then(() => {
     document.getElementById('addEmployeeForm').style.display = 'block';
     document.getElementById('addEmployeeForm').scrollIntoView({ behavior: 'smooth' });
@@ -220,30 +206,30 @@ function initEmployeeForm() {
   document.getElementById('employeeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const editId = document.getElementById('employeeEditId').value;
-    const formData = new FormData();
-    formData.append('name', document.getElementById('employeeName').value.trim());
-    formData.append('mobile', document.getElementById('employeeMobile').value.trim());
-    formData.append('email_id', document.getElementById('employeeEmail').value.trim());
-    formData.append('department_id', document.getElementById('employeeDepartment').value);
-    formData.append('joining_date', document.getElementById('employeeJoining').value);
-    formData.append('birthday', document.getElementById('employeeBirthday').value);
-    formData.append('work_start_time', document.getElementById('employeeWorkStart').value);
-    formData.append('annual_leave_days', document.getElementById('employeeAnnualLeave').value);
-    formData.append('track_visit_time', document.getElementById('employeeTrackVisit').checked ? 'true' : 'false');
-
-    const fileInput = document.getElementById('employeeDocument');
-    if (fileInput.files[0]) formData.append('document', fileInput.files[0]);
-
-    const removeDoc = document.getElementById('removeDocument');
-    if (removeDoc && removeDoc.checked) formData.append('remove_document', 'true');
+    const payload = {
+      name: document.getElementById('employeeName').value.trim(),
+      mobile: document.getElementById('employeeMobile').value.trim(),
+      email_id: document.getElementById('employeeEmail').value.trim(),
+      department_id: document.getElementById('employeeDepartment').value,
+      joining_date: document.getElementById('employeeJoining').value,
+      birthday: document.getElementById('employeeBirthday').value,
+      work_start_time: document.getElementById('employeeWorkStart').value,
+      annual_leave_days: document.getElementById('employeeAnnualLeave').value,
+      track_visit_time: document.getElementById('employeeTrackVisit').checked ? 'true' : 'false'
+    };
 
     try {
       if (editId) {
-        formData.append('id', editId);
-        await apiRequest('/api/employees/update', { method: 'POST', body: formData });
+        await apiRequest(`/api/employees/${encodeURIComponent(editId)}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
         showToast('Employee updated.', 'success');
       } else {
-        await apiRequest('/api/employees', { method: 'POST', body: formData });
+        await apiRequest('/api/employees', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
         showToast('Employee added.', 'success');
       }
       document.getElementById('addEmployeeForm').style.display = 'none';
@@ -439,10 +425,8 @@ function formatLateCategory(cat) {
 
 function setLeaveMode(onLeave) {
   const fields = document.getElementById('attendanceFields');
-  const halfEl = document.getElementById('attHalfDay');
   if (onLeave) {
     fields.style.display = 'none';
-    if (halfEl) halfEl.value = '';
     document.getElementById('attInTime').value = '';
     document.getElementById('attOutTime').value = '';
     document.getElementById('attBreakTime').value = '';
@@ -476,10 +460,7 @@ function initAttendanceForm() {
   const leaveCb = document.getElementById('attLeave');
   const visitToggle = document.getElementById('visitToggle');
 
-  leaveCb.addEventListener('change', () => {
-    if (leaveCb.checked) document.getElementById('attHalfDay').value = '';
-    setLeaveMode(leaveCb.checked);
-  });
+  leaveCb.addEventListener('change', () => setLeaveMode(leaveCb.checked));
 
   visitToggle.addEventListener('click', () => {
     const body = document.getElementById('visitBody');
@@ -509,7 +490,6 @@ function initAttendanceForm() {
       date: document.getElementById('attDate').value,
       employee_id: Number(document.getElementById('attEmployee').value),
       leave: onLeave,
-      half_day: onLeave ? null : (document.getElementById('attHalfDay').value || null),
       in_time: onLeave ? null : (document.getElementById('attInTime').value || null),
       out_time: onLeave ? null : (document.getElementById('attOutTime').value || null),
       break_time: onLeave ? null : (document.getElementById('attBreakTime').value || null),
@@ -566,9 +546,9 @@ async function showTodayAttendance() {
           </td>
         </tr>`;
       }
-      const halfLabel = a.half_day === 'first_half' ? '1st half' : a.half_day === 'second_half' ? '2nd half' : '';
+      const halfLabel = a.half_day === 'first_half' ? ' (1st half)' : a.half_day === 'second_half' ? ' (2nd half)' : '';
       return `<tr>
-        <td>${escapeHtml(a.name || '')}${halfLabel ? ` <span class="badge-half">${halfLabel}</span>` : ''}</td>
+        <td>${escapeHtml(a.name || '')}${halfLabel}</td>
         <td>${formatTime(a.in_time)}</td>
         <td>${formatTime(a.out_time)}</td>
         <td>${formatTime(a.visit_time_from)}</td>
@@ -597,7 +577,6 @@ function loadAttendanceForEdit(a) {
   document.getElementById('attDate').value = a.date;
   document.getElementById('attEmployee').value = a.employee_id;
   document.getElementById('attLeave').checked = Boolean(a.leave);
-  document.getElementById('attHalfDay').value = a.half_day || '';
   document.getElementById('breakTimeGroup').style.display = 'block';
   updateVisitFieldsForEmployee();
 
@@ -640,24 +619,7 @@ function initRecordsFilter() {
       '<p class="text-center records-empty">Use filters to view records</p>';
   });
 
-  const exportBtn = document.getElementById('btnExportMenu');
-  const exportDropdown = document.getElementById('exportDropdown');
-  exportBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    exportDropdown.classList.toggle('open');
-  });
-  document.addEventListener('click', () => exportDropdown.classList.remove('open'));
-
-  exportDropdown.querySelectorAll('.export-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      exportDropdown.classList.remove('open');
-      const format = item.dataset.format;
-      if (format === 'csv') exportRecords();
-      else if (format === 'excel') exportRecordsExcel();
-      else if (format === 'pdf') exportRecordsPdf();
-    });
-  });
+  document.getElementById('btnExportCsv')?.addEventListener('click', exportRecords);
 }
 
 function getRecordFilterParams() {
@@ -773,7 +735,7 @@ async function fetchRecordsForExport() {
 
 function recordsToRows(attendance) {
   return [
-    ['Date', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To', 'Break', 'Late', 'Half Day', 'Total', 'Status'],
+    ['Date', 'Name', 'In Time', 'Out Time', 'Visit From', 'Visit To', 'Break', 'Late', 'Total', 'Status'],
     ...attendance.map(a => [
       a.date || '',
       a.name || '',
@@ -783,16 +745,15 @@ function recordsToRows(attendance) {
       a.leave ? '' : (a.visit_time_to || ''),
       a.leave ? '' : formatDuration(a.break_time),
       a.leave ? '' : formatLateCategory(a.late_category),
-      a.half_day || '',
       a.leave ? '' : (a.total_time || ''),
-      a.leave ? 'On leave' : (a.half_day ? `Half day (${a.half_day})` : 'Present')
+      a.leave ? 'On leave' : 'Present'
     ])
   ];
 }
 
 async function exportRecords() {
-  const btn = document.getElementById('btnExportMenu');
-  btn.disabled = true;
+  const btn = document.getElementById('btnExportCsv');
+  if (btn) btn.disabled = true;
   try {
     const attendance = await fetchRecordsForExport();
     if (!attendance) return;
@@ -802,67 +763,7 @@ async function exportRecords() {
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    btn.disabled = false;
-  }
-}
-
-async function exportRecordsExcel() {
-  const btn = document.getElementById('btnExportMenu');
-  btn.disabled = true;
-  try {
-    const attendance = await fetchRecordsForExport();
-    if (!attendance) return;
-    const rows = recordsToRows(attendance);
-    const tableRows = rows.map(row =>
-      '<tr>' + row.map(v => `<td>${escapeHtml(String(v))}</td>`).join('') + '</tr>'
-    ).join('');
-    const html = `<html><head><meta charset="UTF-8"></head><body><table>${tableRows}</table></body></html>`;
-    downloadFile(html, `stanzahr-records-${new Date().toISOString().slice(0, 10)}.xls`, 'application/vnd.ms-excel');
-    showToast('Excel exported.', 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function exportRecordsPdf() {
-  const btn = document.getElementById('btnExportMenu');
-  btn.disabled = true;
-  try {
-    const attendance = await fetchRecordsForExport();
-    if (!attendance) return;
-    if (!window.jspdf || !window.jspdf.jsPDF) {
-      showToast('PDF library failed to load.', 'error');
-      return;
-    }
-    const rows = recordsToRows(attendance);
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const stamp = new Date().toISOString().slice(0, 10);
-
-    doc.setFontSize(14);
-    doc.setTextColor(26, 26, 46);
-    doc.text('StanzaHR — Attendance Records', 14, 14);
-    doc.setFontSize(9);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Exported ${stamp}`, 14, 20);
-
-    doc.autoTable({
-      head: [rows[0]],
-      body: rows.slice(1),
-      startY: 24,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [15, 52, 96], textColor: 255 },
-      alternateRowStyles: { fillColor: [248, 250, 252] }
-    });
-
-    doc.save(`stanzahr-records-${stamp}.pdf`);
-    showToast('PDF exported.', 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 

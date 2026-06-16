@@ -26,8 +26,7 @@
   <div class="dashboard">
     <aside class="sidebar">
       <nav>
-        <a href="#" class="nav-item active" data-tab="dashboard">Dashboard</a>
-        <a href="#" class="nav-item" data-tab="attendance">Mark Attendance</a>
+        <a href="#" class="nav-item active" data-tab="attendance">Mark Attendance</a>
         <a href="#" class="nav-item" data-tab="records">Attendance History</a>
         <a href="#" class="nav-item" data-tab="late">Late Tracking</a>
         <a href="#" class="nav-item" data-tab="leave">Leave Management</a>
@@ -39,32 +38,8 @@
 
     <main class="main-content">
 
-      <!-- Dashboard Overview -->
-      <section id="tab-dashboard" class="tab-content">
-        <div class="section-header">
-          <h2>Dashboard</h2>
-          <input type="date" id="dashboardDate" class="dashboard-date-input">
-        </div>
-        <div class="stats-grid" id="statsGrid">
-          <div class="stat-card"><span class="stat-value" id="statTotal">—</span><span class="stat-label">Total Employees</span></div>
-          <div class="stat-card stat-present"><span class="stat-value" id="statPresent">—</span><span class="stat-label">Present Today</span></div>
-          <div class="stat-card stat-absent"><span class="stat-value" id="statAbsent">—</span><span class="stat-label">Absent Today</span></div>
-          <div class="stat-card stat-leave"><span class="stat-value" id="statLeave">—</span><span class="stat-label">On Leave</span></div>
-        </div>
-        <div class="dashboard-panels">
-          <div class="form-panel dashboard-panel">
-            <h3>Upcoming Birthdays</h3>
-            <ul id="birthdayList" class="reminder-list"><li class="text-muted">Loading...</li></ul>
-          </div>
-          <div class="form-panel dashboard-panel">
-            <h3>Reminders</h3>
-            <ul id="reminderList" class="reminder-list"><li class="text-muted">Loading...</li></ul>
-          </div>
-        </div>
-      </section>
-
       <!-- Mark Attendance -->
-      <section id="tab-attendance" class="tab-content" style="display:none;">
+      <section id="tab-attendance" class="tab-content">
         <div class="section-header">
           <h2>Mark Attendance</h2>
         </div>
@@ -88,14 +63,6 @@
               <label class="checkbox-label">
                 <input type="checkbox" id="attLeave"> On Leave (full day)
               </label>
-            </div>
-            <div class="form-group" id="halfDayGroup">
-              <label for="attHalfDay">Half Day</label>
-              <select id="attHalfDay">
-                <option value="">None</option>
-                <option value="first_half">First Half</option>
-                <option value="second_half">Second Half</option>
-              </select>
             </div>
           </div>
 
@@ -197,16 +164,7 @@
               <button class="btn btn-secondary" id="btnClearFilter" type="button">Clear</button>
             </div>
             <div class="records-filter-export">
-              <div class="export-menu">
-                <button class="btn btn-secondary" id="btnExportMenu" type="button">
-                  Export <span class="dropdown-caret">▾</span>
-                </button>
-                <div class="export-dropdown" id="exportDropdown">
-                  <button type="button" class="export-item" data-format="csv">CSV</button>
-                  <button type="button" class="export-item" data-format="excel">Excel</button>
-                  <button type="button" class="export-item" data-format="pdf">PDF</button>
-                </div>
-              </div>
+              <button class="btn btn-secondary" id="btnExportCsv" type="button">Export CSV</button>
             </div>
           </div>
           <p class="records-filter-note">To Date: leave empty to view a single day only.</p>
@@ -245,12 +203,6 @@
       <!-- Leave Management -->
       <section id="tab-leave" class="tab-content" style="display:none;">
         <div class="section-header"><h2>Leave Management</h2></div>
-        <div class="masters-tabs leave-tabs">
-          <button type="button" class="masters-tab active" data-leave-tab="records">Leave Records</button>
-          <button type="button" class="masters-tab" data-leave-tab="balances">Balances</button>
-          <button type="button" class="masters-tab" data-leave-tab="calendar">Leave Calendar</button>
-          <button type="button" class="masters-tab" data-leave-tab="team">Team Leave View</button>
-        </div>
         <div id="leave-records" class="leave-panel">
           <div class="filter-bar form-panel">
             <div class="form-row">
@@ -272,9 +224,6 @@
             <form id="leaveForm">
               <div class="form-row">
                 <div class="form-group"><label for="leaveFormEmployee">Employee</label><select id="leaveFormEmployee" required></select></div>
-                <div class="form-group"><label for="leaveFormType">Type</label>
-                  <select id="leaveFormType"><option value="full">Full Day</option><option value="first_half">First Half</option><option value="second_half">Second Half</option></select>
-                </div>
               </div>
               <div class="form-row">
                 <div class="form-group"><label for="leaveFormStart">Start Date</label><input type="date" id="leaveFormStart" required></div>
@@ -287,24 +236,6 @@
           <div class="table-container"><table class="table"><thead><tr>
             <th>Employee</th><th>From</th><th>To</th><th>Type</th><th>Days</th><th>Reason</th><th></th>
           </tr></thead><tbody id="leaveTableBody"><tr><td colspan="7" class="text-center">Load records</td></tr></tbody></table></div>
-        </div>
-        <div id="leave-balances" class="leave-panel" style="display:none;">
-          <div class="table-container"><table class="table"><thead><tr>
-            <th>Employee</th><th>Quota</th><th>Taken</th><th>Remaining</th>
-          </tr></thead><tbody id="leaveBalanceBody"><tr><td colspan="4" class="text-center">Load balances</td></tr></tbody></table></div>
-        </div>
-        <div id="leave-calendar" class="leave-panel" style="display:none;">
-          <div class="filter-bar form-panel">
-            <div class="form-row">
-              <div class="form-group"><label for="calYear">Year</label><input type="number" id="calYear"></div>
-              <div class="form-group"><label for="calMonth">Month</label><select id="calMonth"></select></div>
-              <div class="form-group form-actions-inline"><button type="button" class="btn btn-primary" id="btnLoadCalendar">Load</button></div>
-            </div>
-          </div>
-          <div id="leaveCalendarGrid" class="calendar-grid"></div>
-        </div>
-        <div id="leave-team" class="leave-panel" style="display:none;">
-          <div id="teamLeaveList" class="team-leave-list"><p class="text-muted">Load team leave from Leave Records tab first.</p></div>
         </div>
       </section>
 
@@ -344,11 +275,6 @@
                 <label class="checkbox-label"><input type="checkbox" id="employeeTrackVisit"> Track visit in/out times</label>
               </div>
             </div>
-            <div class="form-group">
-              <label for="employeeDocument">Document</label>
-              <input type="file" id="employeeDocument" accept=".pdf,image/*">
-              <div id="currentDocument" class="current-document" style="display:none;"></div>
-            </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Save</button>
               <button type="button" class="btn btn-secondary" id="btnCancelEmployee">Cancel</button>
@@ -367,7 +293,6 @@
         <div class="section-header"><h2>Organization</h2></div>
         <div class="masters-tabs">
           <button type="button" class="masters-tab active" data-org-tab="departments">Departments</button>
-          <button type="button" class="masters-tab" data-org-tab="holidays">Holidays</button>
           <button type="button" class="masters-tab" data-org-tab="settings">Company Settings</button>
         </div>
 
@@ -401,32 +326,9 @@
         </div>
         </div>
 
-        <div id="org-holidays" class="org-panel" style="display:none;">
-          <div class="section-header section-header-sub">
-            <h3>Holiday Management</h3>
-            <button class="btn btn-primary btn-sm" id="btnAddHoliday">+ Add Holiday</button>
-          </div>
-          <div id="addHolidayForm" class="form-panel" style="display:none;">
-            <form id="holidayForm">
-              <div class="form-row">
-                <div class="form-group"><label for="holidayName">Holiday Name</label><input type="text" id="holidayName" required></div>
-                <div class="form-group"><label for="holidayDate">Date</label><input type="date" id="holidayDate" required></div>
-              </div>
-              <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Save</button>
-                <button type="button" class="btn btn-secondary" id="btnCancelHoliday">Cancel</button>
-              </div>
-            </form>
-          </div>
-          <div class="table-container">
-            <table class="table"><thead><tr><th>Date</th><th>Name</th><th></th></tr></thead>
-            <tbody id="holidaysTableBody"><tr><td colspan="3" class="text-center">Loading...</td></tr></tbody></table>
-          </div>
-        </div>
-
         <div id="org-settings" class="org-panel" style="display:none;">
           <div class="form-panel">
-            <h3>Company Calendar Settings</h3>
+            <h3>Company Settings</h3>
             <form id="orgSettingsForm">
               <div class="form-row">
                 <div class="form-group"><label for="orgWorkStart">Default Work Start</label><input type="time" id="orgWorkStart"></div>
@@ -492,8 +394,6 @@
   </div>
 
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="js/routes.js"></script>
   <script src="js/org.js"></script>
   <script src="js/duration.js"></script>
